@@ -1,10 +1,6 @@
 This will be the site of my latest projects.
 
-MusicService plugin coming soon.
-
-BE PATIENT! This plugin has some hardcoded file paths that I need to get rid of before it can be used on other servers. I'm going to be pulling paths from a config.yml instead that will allow server admins to set the locations. As such, there is no code or jar available yet.
-
-All of the major known bugs have been stomped, so we'll be putting out a release shortly as soon as I make those last fixes. I'm at my job right now so I won't be able to update it until I get home tonight.
+MusicService code added to repository.
 
 -- palisade (blakesteel)
 

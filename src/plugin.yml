@@ -1,0 +1,32 @@
+name: MusicService
+version: 1.2.5
+description: Provides the ability to stream music.
+author: blakesteel
+website: http://127.0.0.1
+
+main: blakesteel.MusicService.MusicService
+database: false
+depend: [Factions]
+
+commands:
+  setmusic:
+    description: Set the music URL at the land at this location.
+    permission: musicservice.setmusic
+    usage: Type /<command> to set the music URL at this location.
+  reloadmusic:
+    description: Reload the music at this location.
+    permission: musicservice.reloadmusic
+    usage: Type /<command> to reload the music at this location.
+
+permissions:
+  musicservice.*:
+    description: Supports setting of the music stations.
+    children:
+      musicservice.setmusic: true
+      musicservice.reloadmusic: true
+  musicservice.setmusic:
+    description: Set the music URL for this location.
+    default: true
+  musicservice.reloadmusic:
+    description: Reload the music at this location.
+    default: true

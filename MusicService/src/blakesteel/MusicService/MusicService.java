@@ -23,10 +23,12 @@ import com.sk89q.worldguard.protection.managers.RegionManager;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 import java.awt.Rectangle;
 import java.io.*;
-import java.util.HashMap;
-import java.util.Map;
+import java.net.URL;
+import java.net.URLConnection;
+import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import org.apache.commons.lang.StringEscapeUtils;
 import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
@@ -42,6 +44,11 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
+class StreamInfo {
+    public String Title;
+    public String Stream;
+}
+
 /**
  * Music Service
  * 
@@ -49,13 +56,16 @@ import org.bukkit.plugin.java.JavaPlugin;
  */
 public class MusicService extends JavaPlugin implements Listener {
     static final String LOG_PREFIX = "[MusicService] ";
+    static final String shoutcastSearchUrl = "http://www.shoutcast.com/Internet-Radio/%s";
     static final Logger logger = Logger.getLogger("Minecraft");
+
     
     private boolean pluginEnabled = false;
     
     private Map<String, Integer> radioTowers = new HashMap<String, Integer>();
     private Map<String, String> radioStations = new HashMap<String, String>();
     private Map<String, String> playerStations = new HashMap<String, String>();
+    private Map<String, List<StreamInfo>> playerSearches = new HashMap<String, List<StreamInfo>>();
     
     private String refreshUrl;
     private String relativeUrl;
@@ -388,6 +398,48 @@ public class MusicService extends JavaPlugin implements Listener {
         return false;
     }
     
+    private List<StreamInfo> findMusic(CommandSender sender, String searchString) {
+        List<StreamInfo> streams = searchShoutcast(searchString);
+        if (streams.size() > 0) {
+            int i = 0;
+            for (StreamInfo result : streams) {
+                sender.sendMessage("[" + (i++) + "] " + result.Title);
+            }
+        }
+        return streams;
+    }
+    
+    private boolean pickMusic(final Player player, List<StreamInfo> streams, int index) {
+        boolean stationSet = false;
+        if (streams.size() > 0) {
+            String ipPort = getStream(streams, index);
+            String[] args = new String[] {ipPort};
+
+            System.out.println("Setting music stream [" + index + "]: " + ipPort);
+
+            // Set music on faction land.
+            stationSet = setMusicOnFactionLand(player, args);
+
+            // Has no faction here or no plugin?
+            if (!stationSet) {
+                // Set music in wg region.
+                stationSet = setWorldGuardStation(player, args);
+
+                // Has no region here or no plugin?
+                if (!stationSet) {
+                    // Set music in the wilderness.
+                    stationSet = setMusicInWilderness(player, args);
+
+                    // Only fails without a tower.
+                    if (!stationSet) {
+                        player.sendMessage("No tower here.");
+                    }
+                }
+            }
+        }
+        return stationSet;
+    }
+    
     @Override
     public boolean onCommand(CommandSender sender, Command cmd, String commandLabel, String[] args) {
         if (!pluginEnabled) return false;
@@ -447,6 +499,30 @@ public class MusicService extends JavaPlugin implements Listener {
             );
 
             return true;
+        }
+        else if (cmd.getName().equalsIgnoreCase("findmusic")) {
+            if (args.length > 0) {
+                // Combine the arguments into one string.
+                String searchString = StringEscapeUtils.escapeJava(Arrays.toString(args));
+                
+                // Find the music and get the streams.
+                List<StreamInfo> streams = findMusic(sender, searchString);
+                
+                // Track the search results for this player.
+                playerSearches.put(player.getName(), streams);
+                return true;
+            }
+        }
+        else if (cmd.getName().equalsIgnoreCase("pickmusic")) {
+            String playerName = player.getName();
+            if (playerSearches.containsKey(playerName)) {
+                List<StreamInfo> streams = playerSearches.get(playerName);
+                boolean stationSet = pickMusic(player, streams, Integer.parseInt(args[0]));
+                playerSearches.put(player.getName(), null);
+                return stationSet;
+            } else {
+                player.sendMessage("MusicService: First use: /findmusic <searchstring>");
+            }
         }
 
         return false;
@@ -948,5 +1024,78 @@ public class MusicService extends JavaPlugin implements Listener {
         }
         
         return false;
+    }
+    
+    private String getStream(List<StreamInfo> streams, int index) {
+        return streams.get(index).Stream;
+    }
+    
+    private List searchShoutcast(String searchString) {
+        // List of streams.
+        List streams = new ArrayList();
+        
+        // The search url.
+        String search = String.format(shoutcastSearchUrl, searchString);
+        
+        // Get the search results.
+        Object[] results = httpGet(search);
+        
+        // Find all of the streams.
+        for (Object result : results) {
+            // A search result line.
+            String line = (String)result;
+            
+            // Valid stream .pls url?
+            if (line.contains("a href") &&          // Is a link?
+                line.contains("yp.shoutcast") &&    // a shoutcast .pls?
+                !line.contains("ttsl.html"))        // not the ttsl.html
+            {
+                
+                // Parse the .pls for the stream info.
+                StreamInfo info = getStreamInfo(line.split("\"")[1]);
+                
+                if (info != null) {
+                    streams.add(info);
+                }
+            }
+        }
+        
+        return streams;
+    }
+    
+    private StreamInfo getStreamInfo(String urlString) {
+        StreamInfo info = new StreamInfo();
+        Object[] results = httpGet(urlString);
+        for (Object result : results) {
+            String line = (String)result;
+            if (line.startsWith("File1")) {
+                info.Stream = line.split("=")[1];
+            }
+            else if (line.startsWith("Title1")) {
+                info.Title = line.split("=")[1];
+                break;
+            }
+        }
+        return info;
+    }
+    
+    private Object[] httpGet(String urlString) {
+        List arr = new ArrayList();
+        try {
+            URL url = new URL(urlString);
+            URLConnection conn = url.openConnection();
+            BufferedReader in =
+                    new BufferedReader(
+                        new InputStreamReader(
+                            conn.getInputStream()));
+            String inputLine;
+            while ((inputLine = in.readLine()) != null) {
+                arr.add(inputLine);
+            }
+            in.close();
+        } catch (IOException ex) {
+            System.out.println("Error: " + ex.getMessage());
+        }
+        return arr.toArray();
     }
 }

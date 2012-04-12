@@ -1,12 +1,12 @@
 name: MusicService
-version: 1.2.5
+version: 1.4.0
 description: Provides the ability to stream music.
 author: blakesteel
 website: http://127.0.0.1
 
 main: blakesteel.MusicService.MusicService
 database: false
-depend: [Factions]
+softdepend: [WorldGuard, Factions]
 
 commands:
   setmusic:
@@ -17,6 +17,14 @@ commands:
     description: Reload the music at this location.
     permission: musicservice.reloadmusic
     usage: Type /<command> to reload the music at this location.
+  pickmusic:
+    description: Pick the music stream produced by the findmusic command.
+    permission: musicservice.setmusic
+    usage: Type /<command> # to pick the music stream at this location from the findmusic command.
+  findmusic:
+    description: Find music streams on shoutcast by searching.
+    permission: musicservice.findmusic
+    usage: Type /<command> searchstring to find streams on the shoutcast website.
 
 permissions:
   musicservice.*:
@@ -24,9 +32,17 @@ permissions:
     children:
       musicservice.setmusic: true
       musicservice.reloadmusic: true
+      musicservice.pickmusic: true
+      musicservice.findmusic: true
   musicservice.setmusic:
     description: Set the music URL for this location.
     default: true
   musicservice.reloadmusic:
     description: Reload the music at this location.
+    default: true
+  musicservice.pickmusic:
+    description: Pick the music stream produced by the findmusic command.
+    default: true
+  musicservice.findmusic:
+    description: Find music streams on shoutcast by searching.
     default: true

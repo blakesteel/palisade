@@ -1,0 +1,150 @@
+<html>
+<head><title>Music Player</title>
+<script type="text/javascript">//<![CDATA[
+if (document.images) {
+    img1 = new Image();
+    img1.src = "images/green.png";
+    img2 = new Image();
+    img2.src = "images/yellow.png";
+}
+
+var invocation = createCrossDomainRequest();
+var time2 = 0;
+var nled = 0;
+
+function msieversion() {
+   var ua = navigator.userAgent;
+   var msie = ua.indexOf("MSIE ");
+   if (msie > 0) return parseInt(ua.substring(msie+5, ua.indexOf(".", msie)));
+   else return 0;
+}
+
+function updateRequest() {
+    clearTimeout(time2);
+    time2 = setTimeout("request()", 250);
+}
+
+function createCrossDomainRequest() {
+    if (window.XMLHttpRequest) {
+        return new window.XMLHttpRequest;
+    } else {
+        try {
+            return new ActiveXObject("MSXML2.XMLHTTP");
+        } catch (ex) {
+            return null;
+        }
+    }
+}
+
+function changeStatus(statusText) {
+    document.getElementById('status').innerHTML = statusText;
+
+    var iever = msieversion();
+
+    if (iever >= 7) {
+        document.getElementById('notes').innerHTML = "IE" + iever + " detected. This browser has trouble with this site, we're working on it.";
+    } else {
+        if (window.XMLHttpRequest) {
+            document.getElementById('notes').innerHTML = "Chrome, Opera, Firefox and Safari should work correctly.";
+        }
+        else {
+            document.getElementById('notes').innerHTML = "Your browser does not support an AJAX that we are aware of.";
+        }
+    }
+}
+
+function handler(evtXHR) {
+    if (invocation.readyState == 4) {
+        if (invocation.status != 200) {
+            changeStatus('Left faction land, refreshing...');
+            location.reload(true);
+        }
+        else {
+            changeStatus('In faction land, streaming station...');
+            updateLed();
+            updateRequest();
+        }
+    }
+    else {
+        updateRequest();
+    }
+}
+
+function request() {
+    try {
+        if (invocation) {
+            // Had to change this to a post because IE is retarded as hell and cant do GET properly.
+            invocation.open("POST", "#RELATIVE/music/#USER.txt", true);
+            invocation.onreadystatechange = handler;
+//            invocation.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
+            invocation.send(null);
+        }
+        else {
+            changeStatus('Failed to send request.. No AJAX support.');
+        }
+    } catch (failed) {
+        changeStatus('Browser does not support AJAX?');
+    }
+}
+
+function updateLed() {
+    if (document.images) {
+        if (nled == 0) {
+            document["image"].src = eval("img1.src");
+            nled = 1;
+        }
+        else {
+            document["image"].src = eval("img2.src");
+            nled = 0;
+        }
+    }
+}
+//]]></script>
+<script type="text/javascript" src="swf.js"></script>
+<script type="text/javascript">
+    document.write('<div id="playercontainer13317470345"><a  href="http://www.adobe.com/shockwave/download/download.cgi?P1_Prod_Version=ShockwaveFlash">Get&nbsp;Flash</a></div>');
+    var head = window.document.getElementsByTagName("head")[0];
+    var script = null;
+    script = window.document.createElement("script");
+    script.type = "text/javascript";
+    script.src = "http://ajax.googleapis.com/ajax/libs/swfobject/2.2/swfobject.js?" + new Date().getTime();
+    head.appendChild(script);
+    script.onload = script.onreadystatechange = function () {
+        swfObjectLoaded();
+    };
+
+    function swfObjectLoaded() {
+        if (swfobject.hasFlashPlayerVersion("9")) {
+            var fn = '&13317470345';
+            var ln = 'stream.mp3';
+            var flashvars = {
+                'skin': 'snel.swf',
+                'title': 'Live Stream',
+                'type': 'sound',
+                'file': '#URL/;' + ln + fn,
+                'duration': '99999',
+                'id': 'scplayer',
+                'autostart': 'true'
+            };
+            var params = {
+                'allowfullscreen': 'false',
+                'allowscriptaccess': 'always',
+                'bgcolor': '#FFFFFF',
+                'wmode': 'transparent'
+            };
+            var attributes = {
+                'id': 'scplayer',
+                'name': 'scplayer'
+            };
+            swfobject.embedSWF('player2.swf', 'playercontainer13317470345', '340', '30', '9.0.124', false, flashvars, params, attributes);
+        }
+    }
+</script>
+</head>
+<body onload="request();">
+<img src="images/yellow.png" name="image" border="0px" width="32" height="32" alt="image">
+<p>User: #USER</p>
+<p>Status: <b id='status'>Ready.</b></p>
+<p>Notes: <b id='notes'>No Notes.</b></p>
+</body>
+</html>

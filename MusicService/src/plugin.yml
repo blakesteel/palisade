@@ -1,12 +1,12 @@
 name: MusicService
-version: 1.4.0
+version: 1.4.3
 description: Provides the ability to stream music.
-author: blakesteel
-website: http://127.0.0.1
+author: Palisade
+website: http://dev.bukkit.org/server-mods/musicservice-play-music-anywhere/
 
 main: blakesteel.MusicService.MusicService
 database: false
-softdepend: [WorldGuard, Factions]
+softdepend: [WorldGuard, Factions, Towny]
 
 commands:
   setmusic:

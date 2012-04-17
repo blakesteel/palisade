@@ -76,15 +76,18 @@ public class MusicServiceListener implements Listener {
     public void onPlayerMove(PlayerMoveEvent event) {
         if (!plugin.isPluginEnabled()) return;
         
-        Chunk sourceChunk = event.getFrom().getChunk();
-        Chunk targetChunk = event.getTo().getChunk();
+        //Chunk sourceChunk = event.getFrom().getChunk();
+        //Chunk targetChunk = event.getTo().getChunk();
 
+        // NOTE: There were a lot of situations where checking on chunk transfers
+        // was not enough.
+        
         // Only bother to check for a station change when chunks have changed.
-        if (sourceChunk.getX() != targetChunk.getX() ||
-                sourceChunk.getZ() != targetChunk.getZ()) {
+        //if (sourceChunk.getX() != targetChunk.getX() ||
+        //        sourceChunk.getZ() != targetChunk.getZ()) {
             // Update the player station at the To location.
             plugin.updatePlayerStation(event.getPlayer(), event.getTo());
-        }
+        //}
     }
     
     @EventHandler(priority = EventPriority.NORMAL)
@@ -92,7 +95,7 @@ public class MusicServiceListener implements Listener {
         if (!plugin.isPluginEnabled() || event.getPlayer() == null) return;
         
         // Player left clicked a block?
-        if (event.getAction() == Action.LEFT_CLICK_BLOCK) {
+        if (event.getAction() == Action.RIGHT_CLICK_BLOCK) {
             // Get the item.
             ItemStack item = event.getItem();
             

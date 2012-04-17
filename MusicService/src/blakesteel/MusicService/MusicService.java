@@ -7,7 +7,6 @@ import com.palmergames.bukkit.towny.object.Town;
 import com.palmergames.bukkit.towny.object.TownBlock;
 import com.palmergames.bukkit.towny.object.WorldCoord;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
-import couk.Adamki11s.Regios.Main.Regios;
 import couk.Adamki11s.Regios.Regions.GlobalRegionManager;
 import couk.Adamki11s.Regios.Regions.Region;
 import java.io.*;
@@ -17,6 +16,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import net.techguard.izone.managers.ZoneManager;
+import net.techguard.izone.zones.Zone;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -56,6 +57,7 @@ public class MusicService extends JavaPlugin {
     
     private Plugin factions;
     private Plugin regios;
+    private Plugin izone;
     
     private boolean useExternalWebServer = true;
     
@@ -97,12 +99,20 @@ public class MusicService extends JavaPlugin {
             info("Skipped Towny Support");
         }
         
-        // Try to hook the regios listener.
+        // Try to hook the regios support.
         try {
             regios = SupportRegios.getRegios(getServer());
             info("Hooked Regios Support");
         } catch (PluginUnavailableException ex) {
             info("Skipped Regios Support");
+        }
+        
+        // Try to hook the iZone support.
+        try {
+            izone = SupportIZone.getIZone(getServer());
+            info("Hooked iZone Support");
+        } catch (PluginUnavailableException ex) {
+            info("Skipped iZone Support");
         }
 
         // Creates a config.yml if there isn't yet one.
@@ -285,12 +295,17 @@ public class MusicService extends JavaPlugin {
 
                             // Has no regios region here or no plugin?
                             if (!stationSet) {
-                                // Set music in the wilderness.
-                                stationSet = setMusicInWilderness(player, args);
-
-                                // Only fails without a tower.
+                                stationSet = setIZoneStation(player, args);
+                                
+                                // Has no iZone zone here or no plugin?
                                 if (!stationSet) {
-                                    sender.sendMessage("No tower here.");
+                                    // Set music in the wilderness.
+                                    stationSet = setMusicInWilderness(player, args);
+
+                                    // Only fails without a tower.
+                                    if (!stationSet) {
+                                        sender.sendMessage("No tower here.");
+                                    }
                                 }
                             }
                         }
@@ -513,12 +528,17 @@ public class MusicService extends JavaPlugin {
 
                         // Has no regios region here or no plugin?
                         if (!stationSet) {
-                            // Set music in the wilderness.
-                            stationSet = setMusicInWilderness(player, args);
+                            stationSet = setIZoneStation(player, args);
 
-                            // Only fails without a tower.
+                            // Has no iZone zone here or no plugin?
                             if (!stationSet) {
-                                player.sendMessage("No tower here.");
+                                // Set music in the wilderness.
+                                stationSet = setMusicInWilderness(player, args);
+
+                                // Only fails without a tower.
+                                if (!stationSet) {
+                                    player.sendMessage("No tower here.");
+                                }
                             }
                         }
                     }
@@ -703,9 +723,12 @@ public class MusicService extends JavaPlugin {
                         debug("not a wg region");
                         if (!handleRegios(player)) {
                             debug("not a regios region");
-                            // Must be wilderness, check for tower.
-                            if (!handleWilderness(player)) {
-                                debug("no radio tower");
+                            if (!handleIZone(player)) {
+                                debug("not an iZone region");
+                                // Must be wilderness, check for tower.
+                                if (!handleWilderness(player)) {
+                                    debug("no radio tower");
+                                }
                             }
                         }
                     }
@@ -1017,7 +1040,7 @@ public class MusicService extends JavaPlugin {
     //
     
     private boolean handleRegios(Player player) {
-        if (!pluginEnabled) return false;
+        if (!pluginEnabled || regios == null) return false;
 
         try {
             // Has player?
@@ -1046,7 +1069,7 @@ public class MusicService extends JavaPlugin {
     }
     
     private boolean setRegiosStation(Player player, String[] args) {
-        if (!pluginEnabled) return false;
+        if (!pluginEnabled || regios == null) return false;
         
         try {
             Region region = GlobalRegionManager.getRegion(player);
@@ -1068,6 +1091,67 @@ public class MusicService extends JavaPlugin {
         catch (Exception ex) {
             // Fail silently. No plugin or no region here.
             debug("Error setRegiosStation: " + ex.getMessage());
+        }
+        
+        return false;
+    }
+    
+    //
+    // iZone Support
+    //
+    
+    private boolean handleIZone(Player player) {
+        if (!pluginEnabled || izone == null) return false;
+
+        try {
+            // Has player?
+            if (player != null) {
+                Zone zone = ZoneManager.getZone(player.getLocation());
+
+                // Has iZone zone here?
+                if (zone != null) {
+                    String name = zone.getName();
+                    debug("has zone here: " + name);
+                    return listenStation("izone", name, player);
+                }
+                else {
+                    debug("no zone found here");
+                }
+            }
+        }
+        catch (Exception ex) {
+            // Fail silently. Might mean iZone not installed, or no zone here.
+            StringWriter sw = new StringWriter();
+            ex.printStackTrace(new PrintWriter(sw));
+            debug("Error handleIZone: " + sw.toString());
+        }
+
+        return false;
+    }
+    
+    private boolean setIZoneStation(Player player, String[] args) {
+        if (!pluginEnabled || izone == null) return false;
+        
+        try {
+            Zone zone = ZoneManager.getZone(player.getLocation());
+            
+            // Has zone info?
+            if (zone != null) {
+                String name = zone.getName();
+
+                debug(String.format("setIZoneStation: %s %s %s", player.getName(), name, args[0]));
+                
+                if (args[0].equalsIgnoreCase("blank"))
+                    setStation("izone", name, player, "");
+                else
+                    setStation("izone", name, player, args[0]);
+
+                return true;
+            }
+        }
+        catch (Exception ex) {
+            // Fail silently. No plugin or no zone here.
+            debug("Error setIZoneStation: " + ex.getMessage());
         }
         
         return false;

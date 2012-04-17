@@ -8,6 +8,8 @@ import com.palmergames.bukkit.towny.object.TownBlock;
 import com.palmergames.bukkit.towny.object.WorldCoord;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 import couk.Adamki11s.Regios.Main.Regios;
+import couk.Adamki11s.Regios.Regions.GlobalRegionManager;
+import couk.Adamki11s.Regios.Regions.Region;
 import java.io.*;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -30,7 +32,7 @@ import org.bukkit.plugin.java.JavaPlugin;
  * @author Palisade
  */
 public class MusicService extends JavaPlugin {
-    public static boolean DEBUG = true;
+    public static boolean DEBUG = false;
     private static final Logger logger = Logger.getLogger("Minecraft");
     private static final String LOG_PREFIX = "[MusicService] ";
     
@@ -53,6 +55,8 @@ public class MusicService extends JavaPlugin {
     private File musicDirectory;
     
     private Plugin factions;
+    private Plugin regios;
+    
     private boolean useExternalWebServer = true;
     
     private WebServer webserver;
@@ -95,8 +99,7 @@ public class MusicService extends JavaPlugin {
         
         // Try to hook the regios listener.
         try {
-            Regios regios = SupportRegios.getRegios(getServer());
-            getServer().getPluginManager().registerEvents(new MusicServiceRegiosListener(regios, this), this);
+            regios = SupportRegios.getRegios(getServer());
             info("Hooked Regios Support");
         } catch (PluginUnavailableException ex) {
             info("Skipped Regios Support");
@@ -1013,28 +1016,17 @@ public class MusicService extends JavaPlugin {
     // Regios Support
     //
     
-    public void onRegiosPlayerMoveChunk(Player player, String regionName, boolean inRegion) {
-        if (inRegion) {
-            debug("regios: " + regionName);
-            playerNowStandingInRegiosRegion(player, regionName);
-            handleRegios(player);
-        }
-        else {
-            debug("regios left");
-            playerNowStandingInRegiosRegion(player, null);
-        }
-    }
-    
     private boolean handleRegios(Player player) {
         if (!pluginEnabled) return false;
 
         try {
             // Has player?
             if (player != null) {
-                String name = getRegiosRegionPlayerIsStandingIn(player);
+                Region region = GlobalRegionManager.getRegion(player);
 
-                // Has town here?
-                if (name != null) {
+                // Has regios region here?
+                if (region != null) {
+                    String name = region.getName();
                     debug("has regios here: " + name);
                     return listenStation("regios", name, player);
                 }
@@ -1044,7 +1036,7 @@ public class MusicService extends JavaPlugin {
             }
         }
         catch (Exception ex) {
-            // Fail silently. Might mean regios not installed, or no town here.
+            // Fail silently. Might mean regios not installed, or no region here.
             StringWriter sw = new StringWriter();
             ex.printStackTrace(new PrintWriter(sw));
             debug("Error handleRegios: " + sw.toString());
@@ -1057,12 +1049,14 @@ public class MusicService extends JavaPlugin {
         if (!pluginEnabled) return false;
         
         try {
-            String name = getRegiosRegionPlayerIsStandingIn(player);
-            
-            debug(String.format("setRegiosStation: %s %s %s", player.getName(), name, args[0]));
+            Region region = GlobalRegionManager.getRegion(player);
             
             // Has regios info?
-            if (name != null) {
+            if (region != null) {
+                String name = region.getName();
+
+                debug(String.format("setRegiosStation: %s %s %s", player.getName(), name, args[0]));
+                
                 if (args[0].equalsIgnoreCase("blank"))
                     setStation("regios", name, player, "");
                 else
@@ -1072,25 +1066,10 @@ public class MusicService extends JavaPlugin {
             }
         }
         catch (Exception ex) {
-            // Fail silently. No plugin or no town here.
+            // Fail silently. No plugin or no region here.
             debug("Error setRegiosStation: " + ex.getMessage());
         }
         
         return false;
-    }
-    
-    public void playerNowStandingInRegiosRegion(Player player, String name) {
-        if (player != null) {
-            playerStandingInRegios.put(player.getName(), name);
-        }
-    }
-    
-    public String getRegiosRegionPlayerIsStandingIn(Player player) {
-        if (player != null) {
-            if (playerStandingInRegios.containsKey(player.getName())) {
-                return playerStandingInRegios.get(player.getName());
-            }
-        }
-        return null;
     }
 }

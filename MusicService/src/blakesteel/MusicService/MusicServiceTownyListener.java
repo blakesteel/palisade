@@ -53,7 +53,7 @@ public class MusicServiceTownyListener extends TownyPlayerListener {
                 plugin.onTownyPlayerMoveChunk(player, fromCoord, toCoord, from, to);
             }
         } catch (NotRegisteredException e) {
-            player.sendMessage(e.getMessage());
+            // Fail silently, this land was not a town.
         }
     }
 }

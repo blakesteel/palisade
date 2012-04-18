@@ -10,6 +10,8 @@ import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 import couk.Adamki11s.Regios.Regions.GlobalRegionManager;
 import couk.Adamki11s.Regios.Regions.Region;
 import java.io.*;
+import java.net.URI;
+import java.net.URL;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -18,7 +20,6 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import net.techguard.izone.managers.ZoneManager;
 import net.techguard.izone.zones.Zone;
-import org.apache.commons.lang.StringEscapeUtils;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.command.Command;
@@ -45,6 +46,7 @@ public class MusicService extends JavaPlugin {
     private Map<String, List<StreamInfo>> playerSearches = new HashMap<String, List<StreamInfo>>();
     private Map<String, String> playerStandingInTown = new HashMap<String, String>();
     private Map<String, String> playerStandingInRegios = new HashMap<String, String>();
+    private Map<String, Boolean> musicChangeScheduled = new HashMap<String, Boolean>();
     
     private String refreshUrl;
     private String relativeUrl;
@@ -345,16 +347,37 @@ public class MusicService extends JavaPlugin {
             // Has arguments?
             if (args.length > 0) {
                 // Combine the arguments into one string.
-                String searchString = StringEscapeUtils.escapeJava(Arrays.toString(args));
+                //String searchString = StringEscapeUtils.escapeJava(Arrays.toString(args));
+                URI uri;
+                URL request;
+                //String search = Arrays.toString(args);
+                
+                String searchString = "";
+                for (String token : args) {
+                    searchString += token + " ";
+                }
+                
+                try {
+                    uri = new URI("http", "www.shoutcast.com", "/Internet-Radio/" + searchString, null);
+                    request = uri.toURL();
+                    
+                    info(player.getName() + " findmusic: " + searchString);
 
-                info(player.getName() + " findmusic: " + searchString);
-                
-                // Find the music and get the streams.
-                List<StreamInfo> streams = SupportShoutcast.find(sender, searchString);
-                
-                // Track the search results for this player.
-                playerSearches.put(player.getName(), streams);
-                return true;
+                    // Find the music and get the streams.
+                    List<StreamInfo> streams = SupportShoutcast.find(sender, request);
+                    
+                    if (streams == null) {
+                        player.sendMessage("We are sorry, there were no radio stations matching: " + searchString);
+                        return false;
+                    }
+                    else {
+                        // Track the search results for this player.
+                        playerSearches.put(player.getName(), streams);
+                    }
+                    return true;
+                } catch (Exception ex) {
+                    severe("Error: " + ex.getMessage());
+                }
             }
             else {
                 player.sendMessage("Command lacked arguments.");
@@ -614,38 +637,71 @@ public class MusicService extends JavaPlugin {
     private void changePlayerMusic(final Player player, final String url) {
         if (!pluginEnabled) return;
         
+        // No station, turn off music and return.
         if (url.equals("")) {
-            // No station, turn off music and return.
+            // Turn off the music.
             noPlayerMusic(player);
+            
+            // Done.
             return;
         }
 
+        // Player is on a station?
         if (playerStations.containsKey(player.getName())) {
+            // Station already matches the one we're changing to?
             if (playerStations.get(player.getName()).equals(url)) {
-                // Player already on station, just return.
+                // Done.
                 return;
             }
         }
+
+        // Does not contain a music schedule change?
+        if (!musicChangeScheduled.containsKey(player.getName())) {
+            // Initialize schedule, default to no schedule.
+            musicChangeScheduled.put(player.getName(), false);
+        }
         
-        noPlayerMusic(player);
-        
-        playerStations.put(player.getName(), url);
-        
-        Bukkit.getScheduler().scheduleSyncDelayedTask(
-            this,
-            new Runnable(){
-                @Override
-                public void run(){
-                    setMusicStation(player, url);
-                }
-            },
-            40 // 20 ticks = 1 second
-        );
+        // Not yet scheduled to change?
+        if (!musicChangeScheduled.get(player.getName())) {
+            // Schedule a change.
+            musicChangeScheduled.put(player.getName(), true);
+
+            // Turn off the music to flag the .txt file for the ajax to reset.
+            noPlayerMusic(player);
+
+            // Schedule the task.
+            Bukkit.getScheduler().scheduleSyncDelayedTask(
+                this,
+                new Runnable(){
+                    @Override
+                    public void run(){
+                        playerStations.put(player.getName(), url);
+                        setMusicStation(player, url);
+
+                        // Music changed, unschedule.
+                        musicChangeScheduled.put(player.getName(), false);
+                    }
+                },
+                40 // 20 ticks = 1 second
+            );
+        }
     }  
     
     private void noPlayerMusic(Player player) {
         if (!pluginEnabled) return;
         
+        // Already has a station?
+        if (playerStations.containsKey(player.getName())) {
+            // Station is already set to none?
+            if (playerStations.get(player.getName()).equals("")) {
+                // Done.
+                return;
+            }
+        }
+        
+        // Nothing is something too! ;-)
+        playerStations.put(player.getName(), "");
+
         //FileMutex playerSemaphore = null;
         //FileMutex txtSemaphore = null;
         
@@ -690,9 +746,6 @@ public class MusicService extends JavaPlugin {
                 // Write the new html for the refresh to the file.
                 out.write(newRefresh);
                 out.close();
-
-                // Nothing is something too! ;-)
-                playerStations.put(player.getName(), "");
             }
         }
         catch (Exception e) {

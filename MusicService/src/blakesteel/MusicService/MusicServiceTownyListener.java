@@ -3,10 +3,7 @@ package blakesteel.MusicService;
 import com.palmergames.bukkit.towny.NotRegisteredException;
 import com.palmergames.bukkit.towny.Towny;
 import com.palmergames.bukkit.towny.event.TownyPlayerListener;
-import com.palmergames.bukkit.towny.object.Coord;
-import com.palmergames.bukkit.towny.object.TownyUniverse;
-import com.palmergames.bukkit.towny.object.TownyWorld;
-import com.palmergames.bukkit.towny.object.WorldCoord;
+import com.palmergames.bukkit.towny.object.*;
 import java.util.logging.Logger;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
@@ -50,10 +47,32 @@ public class MusicServiceTownyListener extends TownyPlayerListener {
             WorldCoord toCoord = new WorldCoord(toWorld, Coord.parseCoord(to));
 
             if (!fromCoord.equals(toCoord)) {
-                plugin.onTownyPlayerMoveChunk(player, fromCoord, toCoord, from, to);
+                onTownyPlayerMoveChunk(player, fromCoord, toCoord, from, to);
             }
         } catch (NotRegisteredException e) {
             // Fail silently, this land was not a town.
+        }
+    }
+    
+    private void onTownyPlayerMoveChunk(Player player, WorldCoord from, WorldCoord to,
+                                  Location fromLoc, Location toLoc) {
+        TownBlock block;
+        try {
+            block = to.getWorld().getTownBlock(to.getX(), to.getZ());
+        
+            if (block != null && block.hasTown()) {
+                Town town = block.getTown();
+                String townName = town.getName();
+                
+                //debug("TOWN: " + townName);
+                plugin.playerNowStandingInTown(player, townName);
+                plugin.handleTowny(player);
+            }
+            else {
+                plugin.playerNowStandingInTown(player, null);
+            }
+        } catch (NotRegisteredException ex) {
+            plugin.playerNowStandingInTown(player, null);
         }
     }
 }

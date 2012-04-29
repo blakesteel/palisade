@@ -83,7 +83,11 @@ public class MusicServiceListener implements Listener {
         if (sourceChunk.getX() != targetChunk.getX() ||
                 sourceChunk.getZ() != targetChunk.getZ())*/
             // Update the player station at the To location.
+            //plugin.updatePlayerStation(event.getPlayer(), event.getTo());
+        
+        if (event.getFrom().distance(event.getTo()) > 0) {
             plugin.updatePlayerStation(event.getPlayer(), event.getTo());
+        }
     }
     
     @EventHandler(priority = EventPriority.NORMAL)

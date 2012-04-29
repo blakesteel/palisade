@@ -1,18 +1,15 @@
 package blakesteel.MusicService;
 
 import com.massivecraft.factions.Faction;
-import com.palmergames.bukkit.towny.NotRegisteredException;
 import com.palmergames.bukkit.towny.Towny;
-import com.palmergames.bukkit.towny.object.Town;
-import com.palmergames.bukkit.towny.object.TownBlock;
-import com.palmergames.bukkit.towny.object.WorldCoord;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 import couk.Adamki11s.Regios.Regions.GlobalRegionManager;
 import couk.Adamki11s.Regios.Regions.Region;
-import java.io.*;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.net.URI;
 import java.net.URL;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,36 +34,22 @@ public class MusicService extends JavaPlugin {
     public static boolean DEBUG = false;
     private static final Logger logger = Logger.getLogger("Minecraft");
     private static final String LOG_PREFIX = "[MusicService] ";
-    
     private boolean pluginEnabled = false;
-    
     private Map<String, Integer> radioTowers = new HashMap<String, Integer>();
     private Map<String, String> radioStations = new HashMap<String, String>();
     private Map<String, String> playerStations = new HashMap<String, String>();
     private Map<String, List<StreamInfo>> playerSearches = new HashMap<String, List<StreamInfo>>();
     private Map<String, String> playerStandingInTown = new HashMap<String, String>();
-    private Map<String, String> playerStandingInRegios = new HashMap<String, String>();
     private Map<String, Boolean> musicChangeScheduled = new HashMap<String, Boolean>();
-    
-    private String refreshUrl;
-    private String relativeUrl;
-    
-    private String refresh = "<meta HTTP-EQUIV=\"REFRESH\" content=\"1; url=#REFRESH" +
-                             "music/#USER.html\">There is currently no music station available at this position.";
-    
-    private File wwwRootDirectory;
-    private File musicDirectory;
-    
+    private WebMemoryFile templateWebFile = null;
+    private String refreshUrl = "http://localhost:8888/";
     private Plugin factions;
     private Plugin regios;
     private Plugin izone;
-    
-    private boolean useExternalWebServer = true;
-    
     private WebServer webserver;
     private int wwwPort = 8888;
-    
-    private String pluginDir;
+    private String refresh = "<meta HTTP-EQUIV=\"REFRESH\" content=\"2; url=#REFRESH" +
+                             "#USER.html\">There is currently no music station available at this position.";
     
     //
     // Properties
@@ -86,9 +69,6 @@ public class MusicService extends JavaPlugin {
     
     @Override
     public void onEnable() {
-        pluginDir = new File(new File(new File(".").getAbsolutePath(), "plugins"), "MusicService").toString();
-        info("pluginDir: " + pluginDir);
-
         // Register the music service listener for events.
         getServer().getPluginManager().registerEvents(new MusicServiceListener(this), this);
 
@@ -98,7 +78,7 @@ public class MusicService extends JavaPlugin {
             getServer().getPluginManager().registerEvents(new MusicServiceTownyListener(towny, this), this);
             info("Hooked Towny Support");
         } catch (PluginUnavailableException ex) {
-            info("Skipped Towny Support");
+            //info("Skipped Towny Support");
         }
         
         // Try to hook the regios support.
@@ -106,7 +86,7 @@ public class MusicService extends JavaPlugin {
             regios = SupportRegios.getRegios(getServer());
             info("Hooked Regios Support");
         } catch (PluginUnavailableException ex) {
-            info("Skipped Regios Support");
+            //info("Skipped Regios Support");
         }
         
         // Try to hook the iZone support.
@@ -114,7 +94,7 @@ public class MusicService extends JavaPlugin {
             izone = SupportIZone.getIZone(getServer());
             info("Hooked iZone Support");
         } catch (PluginUnavailableException ex) {
-            info("Skipped iZone Support");
+            //info("Skipped iZone Support");
         }
 
         // Creates a config.yml if there isn't yet one.
@@ -125,117 +105,40 @@ public class MusicService extends JavaPlugin {
         pluginEnabled = false;
         
         info("Loading configuration....");
-        
-        // Is the wwwRoot configured?
-        if (getConfig().contains("wwwRoot")) {
-            // Establish paths to the www root and music directory.
-            wwwRootDirectory = new File(getConfig().getString("wwwRoot"));
-            musicDirectory = new File(wwwRootDirectory, "music");
-            
-            info("Web Directory: " + wwwRootDirectory.getPath());
 
-            // Is the refreshUrl configured?
-            if (getConfig().contains("refreshUrl")) {
-                // Get the refresh URL.
-                refreshUrl = getConfig().getString("refreshUrl");
-                
-                info("Refresh URL: " + refreshUrl);
-
-                // Is the relativeUrl configured? This is optional.
-                if (getConfig().contains("relativeUrl")) {
-                    // Get the relative URL.
-                    relativeUrl = getConfig().getString("relativeUrl");
-                    
-                    info("Relative URL: " + relativeUrl);
-                }
-                // Not relative, set to "".
-                else {
-                    relativeUrl = "";
-                }
-                
-                if (getConfig().contains("useExternalWebserver")) {
-                    useExternalWebServer = getConfig().getBoolean("useExternalWebserver");
-
-                    info("External Webserver: " + useExternalWebServer);
-                }
-                else {
-                    useExternalWebServer = false;
-
-                    if (getConfig().contains("wwwPort")) {
-                        wwwPort = getConfig().getInt("wwwPort");
-                    }
-                }
-                
-                if (!useExternalWebServer) {
-                    wwwRootDirectory = new File(pluginDir, "www");
-                    musicDirectory = new File(wwwRootDirectory, "music");
-                    
-                    try {
-                        info("Rebuilding built-in music folder.");
-                        Utility.rebuildMusicFolder(getClass(), musicDirectory);
-                        info("Rebuild completed.");
-                    }
-                    catch (Exception ex) {
-                        severe("Error Rebuilding: " + ex.getMessage());
-                    }
-                    
-                    webserver = new WebServer();
-
-                    info("Builtin webserver: " + wwwPort);
-                    webserver.start(wwwRootDirectory.getPath(), wwwPort);
-                }
-                else {
-                    try {
-                       info("Rebuilding htdocs music folder.");
-                       Utility.rebuildMusicFolder(getClass(), musicDirectory);
-                       info("Rebuild completed.");
-                    }
-                    catch (Exception ex) {
-                        severe("Error Rebuilding: " + ex.getMessage());
-                    }
-                }
-
-                // Plugin is ready at this point.
-                pluginEnabled = true;
-            }
+        // Is the refreshUrl configured?
+        if (getConfig().contains("refreshUrl")) {
+            // Get the refresh URL.
+            refreshUrl = getConfig().getString("refreshUrl");
         }
-        // No www root. Fall back on built-in webserver.
-        else {
-            wwwRootDirectory = new File(pluginDir, "www");
-            musicDirectory = new File(wwwRootDirectory, "music");
 
-            try {
-                info("Rebuilding htdocs music folder.");
-                Utility.rebuildMusicFolder(getClass(), musicDirectory);
-                info("Rebuild completed.");
-            }
-            catch (Exception ex) {
-                severe("Error Rebuilding: " + ex.getMessage());
-            }
+        info("Refresh URL: " + refreshUrl);
 
-            info("Web Directory: " + wwwRootDirectory.getPath());
-            
-            // Is the refreshUrl configured?
-            if (getConfig().contains("refreshUrl")) {
-                // Get the refresh URL.
-                refreshUrl = getConfig().getString("refreshUrl");
-                
-                info("Refresh URL: " + refreshUrl);
-
-                if (getConfig().contains("wwwPort")) {
-                    wwwPort = getConfig().getInt("wwwPort");
-                }
-                
-                webserver = new WebServer();
-
-                info("Builtin webserver: " + wwwPort);
-                webserver.start(wwwRootDirectory.getPath(), wwwPort);
-
-                // Plugin is ready at this point.
-                pluginEnabled = true;
-            }
+        if (getConfig().contains("wwwPort")) {
+            wwwPort = getConfig().getInt("wwwPort");
         }
         
+        info("WWW Port: " + wwwPort);
+
+        try {
+            String string = Utility.loadFromResourceAsString(getClass(), "music.html");
+            templateWebFile = new WebMemoryFile(string);
+        } catch (IOException ex) {
+            severe("Error: " + ex.getMessage());
+        }
+
+        webserver = new WebServer();
+        setWebFile("green.png");
+        setWebFile("yellow.png");
+        setWebFile("player2.swf");
+        setWebFile("snel.swf");
+        setWebFile("swf.js");
+        setWebFile("favicon.ico");
+        webserver.start(wwwPort);
+
+        // Plugin is ready at this point.
+        pluginEnabled = true;
+
         try {
             // Get the factions plugin, if it exists.
             factions = SupportFactions.getFactions(getServer());
@@ -245,7 +148,7 @@ public class MusicService extends JavaPlugin {
         
         info(pluginEnabled ? "Enabled" : "Disabled");
     }
-
+    
     @Override
     public void onDisable() {
         // Plugin disabled.
@@ -347,10 +250,8 @@ public class MusicService extends JavaPlugin {
             // Has arguments?
             if (args.length > 0) {
                 // Combine the arguments into one string.
-                //String searchString = StringEscapeUtils.escapeJava(Arrays.toString(args));
                 URI uri;
                 URL request;
-                //String search = Arrays.toString(args);
                 
                 String searchString = "";
                 for (String token : args) {
@@ -402,6 +303,19 @@ public class MusicService extends JavaPlugin {
         return false;
     }
 
+    //
+    // Webserver Routines
+    //
+    
+    private void setWebFile(String path) {
+        try {
+            byte[] bytes = Utility.loadFromResourceAsBytes(getClass(), path);
+            webserver.setMemoryValue(path, new WebMemoryFile(bytes));
+        } catch (IOException ex) {
+            severe("Error: " + ex.getMessage());
+        }
+    }
+    
     //
     // Music Stream Support
     //
@@ -461,16 +375,22 @@ public class MusicService extends JavaPlugin {
         // Has factions?
         if (factions != null && factions.isEnabled()) {
             // Get the faction at the player's location, if any.
-            final Faction faction = SupportFactions.getFactionAtLocation(player);
+            Faction factionLand = null;
+            
+            try {
+                factionLand = SupportFactions.getFactionAtLocation(getServer(), player);
+            } catch (PluginUnavailableException ex) {
+                return false;
+            }
 
             // Does not have faction here?
-            if (faction == null) {
+            if (factionLand == null) {
                 player.sendMessage("Faction did not exist.");
                 return false;
             }
 
             // Get faction name.
-            String regionName = faction.getTag();
+            String regionName = factionLand.getTag();
 
             // Assume we're not in wilderness.
             boolean isWilderness = false;
@@ -482,10 +402,14 @@ public class MusicService extends JavaPlugin {
             }
 
             // Not a safe zone, war zone, or wilderness?
-            if (!(faction.isSafeZone() || faction.isWarZone() || isWilderness)) {
-                // Player was not the faction admin? Bail out.
-                if (!SupportFactions.isPlayerFactionAdmin(faction, player)) {
-                    player.sendMessage("This is not your faction land.");
+            if (!(factionLand.isSafeZone() || factionLand.isWarZone() || isWilderness)) {
+                try {
+                    // Player was not the faction admin? Bail out.
+                    if (!SupportFactions.isPlayerFactionAdmin(getServer(), factionLand, player)) {
+                        player.sendMessage("This is not your faction land.");
+                        return false;
+                    }
+                } catch (PluginUnavailableException ex) {
                     return false;
                 }
             }
@@ -503,6 +427,7 @@ public class MusicService extends JavaPlugin {
 
                 // Get the URL argument.
                 final String url = args[0];
+                final Faction faction = factionLand;
 
                 // Has URL argument?
                 if (url != null) {
@@ -571,85 +496,50 @@ public class MusicService extends JavaPlugin {
         return stationSet;
     }
     
-    private void setMusicStation(Player player, String url) {
+    private void setMusicStation(Player player, String url) throws IOException {
         if (!pluginEnabled) return;
         
-        //FileMutex txtSemaphore = null;
-        //FileMutex playerSemaphore;
-        
-        // Get the player name.
         String playerName = player.getName();
-
-        File playerMusicFile = new File(musicDirectory, playerName + ".html");
-        //playerSemaphore = new FileMutex(playerMusicFile.getPath(), FileMutex.ONE_SECOND);
+        String newUrl = "http://" + url.replace("http://", "");
+        String playerPath = playerName + ".html";
+        String txtPath = playerName + ".txt";
+        String playerWebData = templateWebFile.getString();
         
-        try {
-            //playerSemaphore.acquire();
+        // Has url? Replace #URL.
+        if (newUrl != null)
+            playerWebData = playerWebData.replace("#URL", newUrl);
 
-            String newUrl = "http://" + url.replace("http://", "");
-            
-            File musicHtmlFile = new File(musicDirectory, "music.html");
-            
-            BufferedReader reader = new BufferedReader(new FileReader(musicHtmlFile));
-            PrintWriter writer = new PrintWriter(new FileWriter(playerMusicFile));
-            
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if (newUrl != null)
-                    line = line.replace("#URL", newUrl);
-                
-                if (playerName != null)
-                    line = line.replace("#USER", playerName);
-                
-                if (relativeUrl != null)
-                    line = line.replace("#RELATIVE", relativeUrl);
-                
-                writer.println(line);
-            }
+        // Has player name? Replace #USER.
+        if (playerName != null)
+            playerWebData = playerWebData.replace("#USER", playerName);
 
-            reader.close();
-            writer.close();
-           
-            File txtFile = new File(musicDirectory, playerName + ".txt");
-            
-            //txtSemaphore = new FileMutex(txtFile.getPath(), FileMutex.ONE_SECOND);
-            //txtSemaphore.acquire();
-            
-            FileWriter fstream = new FileWriter(txtFile);
-            BufferedWriter out = new BufferedWriter(fstream);
-            out.write(" ");
-            out.close();
-        }
-        catch (Exception e) {
-            severe(String.format("Failed to write the music service file: %s", playerMusicFile.getPath()));
-        }
-        finally {
-            //if (playerSemaphore != null) {
-            //    playerSemaphore.release();
-            //}
-            
-            //if (txtSemaphore != null) {
-            //    txtSemaphore.release();
-            //}
-        }
+        WebMemoryFile f = new WebMemoryFile(" ");
+        webserver.setMemoryValue(txtPath, f);
+
+        webserver.setMemoryValue(playerPath, new WebMemoryFile(playerWebData));
+        
+        debug("station set: " + newUrl);
+        
+        playerStations.put(player.getName(), newUrl);
     }
     
     private void changePlayerMusic(final Player player, final String url) {
         if (!pluginEnabled) return;
         
+        //debug("changePlayerMusic: " + url);
+        
         // No station, turn off music and return.
-        if (url.equals("")) {
-            // Turn off the music.
+        /*if (url.equals("")) {
+            debug("no station");
             noPlayerMusic(player);
-            
-            // Done.
             return;
-        }
+        }*/
 
         // Player is on a station?
         if (playerStations.containsKey(player.getName())) {
             // Station already matches the one we're changing to?
             if (playerStations.get(player.getName()).equals(url)) {
+                //debug("player already on station");
                 // Done.
                 return;
             }
@@ -666,6 +556,8 @@ public class MusicService extends JavaPlugin {
             // Schedule a change.
             musicChangeScheduled.put(player.getName(), true);
 
+            //debug("stopping music...pending station change..");
+            
             // Turn off the music to flag the .txt file for the ajax to reset.
             noPlayerMusic(player);
 
@@ -675,8 +567,12 @@ public class MusicService extends JavaPlugin {
                 new Runnable(){
                     @Override
                     public void run(){
-                        playerStations.put(player.getName(), url);
-                        setMusicStation(player, url);
+                        try {
+                            //debug("setting music station...");
+                            setMusicStation(player, url);
+                        } catch (IOException ex) {
+                            severe(ex.getMessage());
+                        }
 
                         // Music changed, unschedule.
                         musicChangeScheduled.put(player.getName(), false);
@@ -689,7 +585,7 @@ public class MusicService extends JavaPlugin {
     
     private void noPlayerMusic(Player player) {
         if (!pluginEnabled) return;
-        
+
         // Already has a station?
         if (playerStations.containsKey(player.getName())) {
             // Station is already set to none?
@@ -698,68 +594,31 @@ public class MusicService extends JavaPlugin {
                 return;
             }
         }
-        
+
         // Nothing is something too! ;-)
         playerStations.put(player.getName(), "");
 
-        //FileMutex playerSemaphore = null;
-        //FileMutex txtSemaphore = null;
-        
         // Get the player name.
         String playerName = player.getName();
+        String playerPath = playerName + ".html";
+        String txtPath = playerName + ".txt";
 
-        // Establish the player file name.
-        File playerMusicFile = new File(musicDirectory, playerName + ".html");
-
-        // A file for refreshing the client via AJAX.
-        File refreshedFile = new File(musicDirectory, playerName + ".txt");
-
-        try {
-            boolean deleted = false;
-
-            if ((refreshedFile.exists())) {
-                //txtSemaphore = new FileMutex(refreshedFile.getPath(), FileMutex.ONE_SECOND);
-                //txtSemaphore.acquire();
-                
-                // Delete the txt file to indicate the need to refresh.
-                // If it fails to succeed then this html already exists, don't create it.
-                if (Utility.deleteFile(refreshedFile.getPath())) {
-                    deleted = true;
-                }
-            }
-            else {
-                deleted = true;
-            }
-
-            if (deleted) {
-                //playerSemaphore = new FileMutex(refreshedFile.getPath(), FileMutex.ONE_SECOND);
-                //playerSemaphore.acquire();
-                
-                // Create the file and write the contents, replacing the URL with the one provided.
-                FileWriter fstream = new FileWriter(playerMusicFile);
-                BufferedWriter out = new BufferedWriter(fstream);
-
-                // Replace all occurances of #USER with the player name in the text.
-                String newRefresh = refresh.replace("#USER", playerName);
-                newRefresh = newRefresh.replace("#REFRESH", refreshUrl);
-
-                // Write the new html for the refresh to the file.
-                out.write(newRefresh);
-                out.close();
-            }
+        String newRefreshUrl = refreshUrl;
+        if (!refreshUrl.endsWith("/")) {
+            newRefreshUrl = refreshUrl + "/";
         }
-        catch (Exception e) {
-            severe(String.format("Failed to write the music service file: %s", playerMusicFile.getPath()));
-        }
-        finally {
-            //if (playerSemaphore != null) {
-            //    playerSemaphore.release();
-            //}
-            
-            //if (txtSemaphore != null) {
-            //    txtSemaphore.release();
-            //}
-        }
+        
+        // Replace all occurances of #USER with the player name in the text.
+        String newRefresh = refresh.replace("#USER", playerName);
+
+        // Replace all occurances of #REFRESH with the refresh url.
+        newRefresh = newRefresh.replace("#REFRESH", newRefreshUrl);
+
+        WebMemoryFile f = new WebMemoryFile(" ");
+        f.setEnabled(false);
+        
+        webserver.setMemoryValue(txtPath, f);
+        webserver.setMemoryValue(playerPath, new WebMemoryFile(newRefresh));
     }
     
     public void updatePlayerStation(Player player, Location location) {
@@ -767,20 +626,20 @@ public class MusicService extends JavaPlugin {
         
         if (player != null && location != null) {
             // Change station for faction. Fails on wilderness / no faction.
-            if (!handleFactions(SupportFactions.getFactionAtLocation(location), player)) {
-                debug("not a faction");
+            if (!handleFactions(player, location)) {
+                //debug("not a faction");
                 if (!handleTowny(player)) {
-                    debug("not a town");
+                    //debug("not a town");
                     // Change station for wg region. Fails on no region.
                     if (!handleWorldGuard(player)) {
-                        debug("not a wg region");
+                        //debug("not a wg region");
                         if (!handleRegios(player)) {
-                            debug("not a regios region");
+                            //debug("not a regios region");
                             if (!handleIZone(player)) {
-                                debug("not an iZone region");
+                                //debug("not an iZone region");
                                 // Must be wilderness, check for tower.
                                 if (!handleWilderness(player)) {
-                                    debug("no radio tower");
+                                    //debug("no radio tower");
                                 }
                             }
                         }
@@ -812,18 +671,27 @@ public class MusicService extends JavaPlugin {
     // Factions Support
     //
     
-    private boolean handleFactions(Faction faction, Player player) {
+    private boolean handleFactions(Player player, Location location) {
         if (!pluginEnabled) return false;
         
         // Faction exists?
-        if (factions != null && factions.isEnabled() && faction != null) {
-            // Get the faction region name.
-            String regionName = faction.getTag();
+        if (factions != null && factions.isEnabled()) {
+            Faction faction = null;
+            try {
+                faction = SupportFactions.getFactionAtLocation(getServer(), location);
+            } catch (PluginUnavailableException ex) {
+                return false;
+            }
             
-            // Has region and it's not Wilderness, therfore it is faction land?
-            if (regionName != null) {
-                if (!regionName.contains("Wilderness")) {
-                    return listenStation("faction", regionName, player);
+            if (faction != null) {
+                // Get the faction region name.
+                String regionName = faction.getTag();
+
+                // Has region and it's not Wilderness, therfore it is faction land?
+                if (regionName != null) {
+                    if (!regionName.contains("Wilderness")) {
+                        return listenStation("faction", regionName, player);
+                    }
                 }
             }
         }
@@ -876,7 +744,7 @@ public class MusicService extends JavaPlugin {
 
             Location location = Utility.stringToLocation(getServer(), locationString);
             
-            debug(String.format("setTowerStation - TowerLocation: %f, %f TowerRadius: %d", location.getX(), location.getZ(), radius));
+            //debug(String.format("setTowerStation - TowerLocation: %f, %f TowerRadius: %d", location.getX(), location.getZ(), radius));
             
             if (Utility.towerIntersects(location, radius, player.getLocation())) {
                 if (url != null) {
@@ -933,7 +801,7 @@ public class MusicService extends JavaPlugin {
         }
         catch (PluginUnavailableException ex) {
             // Quietly fail if there is no WorldGuard, user may have chosen not to install it.
-            debug("No worldguard detected.");
+            //debug("No worldguard detected.");
         }
         
         return false;
@@ -943,7 +811,7 @@ public class MusicService extends JavaPlugin {
     // Towny Advanced Support
     //
     
-    public void onTownyPlayerMoveChunk(Player player, WorldCoord from, WorldCoord to,
+    /*public void onTownyPlayerMoveChunk(Player player, WorldCoord from, WorldCoord to,
                                   Location fromLoc, Location toLoc) {
         TownBlock block;
         try {
@@ -952,7 +820,7 @@ public class MusicService extends JavaPlugin {
             if (block != null && block.hasTown()) {
                 Town town = block.getTown();
                 String townName = town.getName();
-                debug("TOWN: " + townName);
+                //debug("TOWN: " + townName);
                 playerNowStandingInTown(player, townName);
                 handleTowny(player);
             }
@@ -962,9 +830,9 @@ public class MusicService extends JavaPlugin {
         } catch (NotRegisteredException ex) {
             playerNowStandingInTown(player, null);
         }
-    }
+    }*/
     
-    private boolean handleTowny(Player player) {
+    public boolean handleTowny(Player player) {
         if (!pluginEnabled) return false;
 
         try {
@@ -974,11 +842,11 @@ public class MusicService extends JavaPlugin {
 
                 // Has town here?
                 if (name != null) {
-                    debug("has town here: " + name);
+                    //debug("has town here: " + name);
                     return listenStation("town", name, player);
                 }
                 else {
-                    debug("no town found here");
+                    //debug("no town found here");
                 }
             }
         }
@@ -986,7 +854,7 @@ public class MusicService extends JavaPlugin {
             // Fail silently. Might mean towny not installed, or no town here.
             StringWriter sw = new StringWriter();
             ex.printStackTrace(new PrintWriter(sw));
-            debug("Error handleTowny: " + sw.toString());
+            //debug("Error handleTowny: " + sw.toString());
         }
 
         return false;
@@ -1010,7 +878,7 @@ public class MusicService extends JavaPlugin {
         }
         catch (Exception ex) {
             // Fail silently. No plugin or no town here.
-            debug("Error setTownyStation: " + ex.getMessage());
+            //debug("Error setTownyStation: " + ex.getMessage());
         }
         
         return false;
@@ -1070,7 +938,7 @@ public class MusicService extends JavaPlugin {
                 String url = (String)getConfig().get(fieldName);
 
                 if (url != null) {
-                    debug(String.format("Changing station for %s in %s to %s", player.getName(), fieldName, url));
+                    //debug(String.format("Changing station for %s in %s to %s", player.getName(), fieldName, url));
 
                     // Change the player music to the url for this station.
                     changePlayerMusic(player, url);
@@ -1103,11 +971,11 @@ public class MusicService extends JavaPlugin {
                 // Has regios region here?
                 if (region != null) {
                     String name = region.getName();
-                    debug("has regios here: " + name);
+                    //debug("has regios here: " + name);
                     return listenStation("regios", name, player);
                 }
                 else {
-                    debug("no regios found here");
+                    //debug("no regios found here");
                 }
             }
         }
@@ -1115,7 +983,7 @@ public class MusicService extends JavaPlugin {
             // Fail silently. Might mean regios not installed, or no region here.
             StringWriter sw = new StringWriter();
             ex.printStackTrace(new PrintWriter(sw));
-            debug("Error handleRegios: " + sw.toString());
+            //debug("Error handleRegios: " + sw.toString());
         }
 
         return false;
@@ -1131,7 +999,7 @@ public class MusicService extends JavaPlugin {
             if (region != null) {
                 String name = region.getName();
 
-                debug(String.format("setRegiosStation: %s %s %s", player.getName(), name, args[0]));
+                //debug(String.format("setRegiosStation: %s %s %s", player.getName(), name, args[0]));
                 
                 if (args[0].equalsIgnoreCase("blank"))
                     setStation("regios", name, player, "");
@@ -1143,7 +1011,7 @@ public class MusicService extends JavaPlugin {
         }
         catch (Exception ex) {
             // Fail silently. No plugin or no region here.
-            debug("Error setRegiosStation: " + ex.getMessage());
+            //debug("Error setRegiosStation: " + ex.getMessage());
         }
         
         return false;
@@ -1164,11 +1032,11 @@ public class MusicService extends JavaPlugin {
                 // Has iZone zone here?
                 if (zone != null) {
                     String name = zone.getName();
-                    debug("has zone here: " + name);
+                    //debug("has zone here: " + name);
                     return listenStation("izone", name, player);
                 }
                 else {
-                    debug("no zone found here");
+                    //debug("no zone found here");
                 }
             }
         }
@@ -1176,7 +1044,7 @@ public class MusicService extends JavaPlugin {
             // Fail silently. Might mean iZone not installed, or no zone here.
             StringWriter sw = new StringWriter();
             ex.printStackTrace(new PrintWriter(sw));
-            debug("Error handleIZone: " + sw.toString());
+            //debug("Error handleIZone: " + sw.toString());
         }
 
         return false;
@@ -1192,7 +1060,7 @@ public class MusicService extends JavaPlugin {
             if (zone != null) {
                 String name = zone.getName();
 
-                debug(String.format("setIZoneStation: %s %s %s", player.getName(), name, args[0]));
+                //debug(String.format("setIZoneStation: %s %s %s", player.getName(), name, args[0]));
                 
                 if (args[0].equalsIgnoreCase("blank"))
                     setStation("izone", name, player, "");
@@ -1204,7 +1072,7 @@ public class MusicService extends JavaPlugin {
         }
         catch (Exception ex) {
             // Fail silently. No plugin or no zone here.
-            debug("Error setIZoneStation: " + ex.getMessage());
+            //debug("Error setIZoneStation: " + ex.getMessage());
         }
         
         return false;

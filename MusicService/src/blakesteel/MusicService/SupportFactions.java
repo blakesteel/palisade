@@ -23,26 +23,47 @@ public class SupportFactions {
         return plugin;
     }
     
-    static public Faction getFactionAtLocation(Player player) {
-        // Get a faction located at the player's position.
-        return Board.getFactionAt(new FLocation(player));
+    static public Faction getFactionAtLocation(Server server, Player player)
+            throws PluginUnavailableException
+    {
+        Plugin factions = getFactions(server);
+        
+        if (factions != null) {
+            // Get a faction located at the player's position.
+            return Board.getFactionAt(new FLocation(player));
+        }
+        
+        return null;
     }
     
-    static public Faction getFactionAtLocation(Location location) {
-        // Get a faction located at the player's position.
-        return Board.getFactionAt(new FLocation(location));
+    static public Faction getFactionAtLocation(Server server, Location location)
+            throws PluginUnavailableException {
+        Plugin factions = getFactions(server);
+
+        if (factions != null) {
+            // Get a faction located at the player's position.
+            return Board.getFactionAt(new FLocation(location));
+        }
+        
+        return null;
     }
 
-    static public boolean isPlayerFactionAdmin(Faction faction, Player player) {
-        // Faction exists?
-        if (faction != null) {
-            // Get the faction's admin.
-            FPlayer factionAdmin = faction.getFPlayerAdmin();
-            
-            if (factionAdmin != null && factionAdmin.getPlayer().equals(player)) {
-                return true;
+    static public boolean isPlayerFactionAdmin(Server server, Faction faction, Player player)
+            throws PluginUnavailableException {
+        Plugin factions = getFactions(server);
+        
+        if (factions != null) {
+            // Faction exists?
+            if (faction != null) {
+                // Get the faction's admin.
+                FPlayer factionAdmin = faction.getFPlayerAdmin();
+
+                if (factionAdmin != null && factionAdmin.getPlayer().equals(player)) {
+                    return true;
+                }
             }
         }
+        
         return false;
     }
 }

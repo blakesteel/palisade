@@ -3,9 +3,9 @@
 <script type="text/javascript">//<![CDATA[
 if (document.images) {
     img1 = new Image();
-    img1.src = "images/green.png";
+    img1.src = "green.png";
     img2 = new Image();
-    img2.src = "images/yellow.png";
+    img2.src = "yellow.png";
 }
 
 var invocation = createCrossDomainRequest();
@@ -42,10 +42,10 @@ function changeStatus(statusText) {
     var iever = msieversion();
 
     if (iever >= 7) {
-        document.getElementById('notes').innerHTML = "IE" + iever + " detected. This browser has trouble with this site, we're working on it.";
+        document.getElementById('notes').innerHTML = "IE" + iever + " in use.";
     } else {
         if (window.XMLHttpRequest) {
-            document.getElementById('notes').innerHTML = "Chrome, Opera, Firefox and Safari should work correctly.";
+            document.getElementById('notes').innerHTML = "Chrome, Opera, Firefox or Safari in use.";
         }
         else {
             document.getElementById('notes').innerHTML = "Your browser does not support an AJAX that we are aware of.";
@@ -74,9 +74,8 @@ function request() {
     try {
         if (invocation) {
             // Had to change this to a post because IE is retarded as hell and cant do GET properly.
-            invocation.open("POST", "#RELATIVE/music/#USER.txt", true);
+            invocation.open("POST", "/#USER.txt", true);
             invocation.onreadystatechange = handler;
-//            invocation.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
             invocation.send(null);
         }
         else {
@@ -142,7 +141,7 @@ function updateLed() {
 </script>
 </head>
 <body onload="request();">
-<img src="images/yellow.png" name="image" border="0px" width="32" height="32" alt="image">
+<img src="yellow.png" name="image" border="0" width="32" height="32" alt="image">
 <p>User: #USER</p>
 <p>Status: <b id='status'>Ready.</b></p>
 <p>Notes: <b id='notes'>No Notes.</b></p>

@@ -4,12 +4,13 @@ import java.io.*;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.net.SocketException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
+import java.util.Map;
 import java.util.TimeZone;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -25,21 +26,28 @@ public class WebServer extends Thread {
     private final String PATTERN_RFC1123 = "EEE, dd MMM yyyy HH:mm:ss zzz";
     private final String serverSoftware = "bukkit MusicService";
     private final ArrayBlockingQueue<Runnable> queue = new ArrayBlockingQueue<Runnable>(5);
-    
     private boolean running = false;    // True if main server thread running.
     private ThreadPoolExecutor threadPool = null;   // Thread pool for handlers.
-    private String rootPath = ".";      // The webserver root path.
     private int port;                   // The webserver port.
     private int poolSize = 2;           // Starts at 2 connections handled.
     private int maxPoolSize = 5;        // Up to 5 connections at a time handled.
     private long keepAliveTime = 10;    // Keep-alive time defaults to 10.
+    private ServerSocket serversocket = null; // The server accept socket.
+    private Map<String, WebMemoryFile> memoryMap = new ConcurrentHashMap<String, WebMemoryFile>();
+    
+    public void setMemoryValue(String path, WebMemoryFile memoryFile) {
+        memoryMap.put(path, memoryFile);
+    }
+    
+    public WebMemoryFile getMemoryValue(String path) {
+        return memoryMap.get(path);
+    }
 
     public WebServer() {
         threadPool = new ThreadPoolExecutor(poolSize, maxPoolSize, keepAliveTime, TimeUnit.SECONDS, queue);
     }
     
-    public void start(String root, int listen_port) {
-        rootPath = root;
+    public void start(int listen_port) {
         port = listen_port;
         this.start();
     }
@@ -59,34 +67,31 @@ public class WebServer extends Thread {
     }
     
     public void shutdown() {
+        // Gracefully shut down any threads spawned by the thread pool.
+        threadPool.shutdown();
+        
         // Release the main accept thread.
         running = false;
         
-        // Gracefully shut down any threads spawned by the thread pool.
-        threadPool.shutdown();
+        if (serversocket != null) {
+            try {
+                serversocket.close();
+            } catch (IOException ex) {
+            }
+        }
     }
 
     @Override
     public void run() {
-        ServerSocket serversocket;
-
         try {
             info("Hosting on port: " + Integer.toString(port));
             serversocket = new ServerSocket(port);
+            running = true;
         } catch (Exception e) {
-            severe("Error:" + e.getMessage());
+            severe("Error: " + e.getMessage());
             return;
         }
-        
-        // Accepts will only wait up to a second to keep the thread from blocking.
-        // This means we can set running = false to end the thread.
-        try {
-            serversocket.setSoTimeout(1000);
-        } catch (SocketException ex) {
-            severe("Error:" + ex.getMessage());
-        }
 
-        running = true;
         while (running) {
             try {
                 Socket connectionsocket = serversocket.accept();
@@ -100,19 +105,24 @@ public class WebServer extends Thread {
                     threadPool.execute(new Runnable() {
                         @Override
                         public void run() {
-                            http_handler(client, input, output);
+                            try {
+                                http_handler(client, input, output);
+                            }
+                            catch (Exception ex) {
+                                debug("http_handler Communication Error: " + ex.getMessage());
+                            }
                         }
                     });
                 }
             } catch (Exception e) {
-                severe("Error:" + e.getMessage());
+                debug("Error:" + e.getMessage());
             }
         }
     }
 
     private void logstatus(InetAddress client, int code) {
         // In DEBUG to reduce log spam.
-        debug("SERVER -> " + client.getHostName() + ": " + getStatusString(code));
+        //debug("SERVER -> " + client.getHostName() + ": " + getStatusString(code));
     }
 
     private void sendErrorResponse(InetAddress client, DataOutputStream output, int code) {
@@ -131,9 +141,7 @@ public class WebServer extends Thread {
 
     private void http_handler(InetAddress client,
                               BufferedReader input,
-                              DataOutputStream output) {
-        //FileMutex semaphore = null;
-        FileInputStream requestedfile = null;
+                              DataOutputStream output) throws IOException {
         int method = 0;
         int start = 0;
         int end = 0;
@@ -143,7 +151,9 @@ public class WebServer extends Thread {
             try {
                 // Read the HTTP request.
                 String tmp = input.readLine();
-                debug(client.getHostName() + " -> SERVER: " + tmp);
+                //debug(client.getHostName() + " -> SERVER: " + tmp);
+
+                debug("REQUEST: " + tmp);
 
                 // Which method are we handling? GET, HEAD, POST?
                 if (tmp.matches("(?i)GET.*")) {
@@ -178,7 +188,7 @@ public class WebServer extends Thread {
                 path = tmp.substring(start + 2, end);
             }
             catch (Exception e) {
-                severe("http_handler Parse Error: " + e.getMessage());
+                debug("http_handler Parse Error: " + e.getMessage());
                 
                 // 400 Bad request!
                 sendErrorResponse(client, output, 400);
@@ -190,104 +200,72 @@ public class WebServer extends Thread {
                 path = "index.html";
             }
 
-            // Are they trying to go back a directory?
-            if (path.contains("..")) {
-                // Do not allow them to move up paths.
-                path = path.replace("..", "");
-            }
+            WebMemoryFile memoryFile = memoryMap.get(path);
+            
+            // Valid memory file?
+            if (memoryFile != null && memoryFile.getEnabled()) {
+                // Determine MIME type from path.
+                int mimeType = getMimeType(path);
 
-            // Root the path.
-            path = (new File(rootPath, path)).getPath();
+                // Write the 200 OK header.
+                output.writeBytes(construct_http_header(client, null, 200, mimeType));
 
-            // Most file operations should happen in under one second.
-            // If a file is locked for longer than that the lock is
-            // probably stale, e.g. process crashed while accessing it.
-            //semaphore = new FileMutex(path, FileMutex.ONE_SECOND);
-
-            try {
-                // Acquire the file lock.
-                //semaphore.acquire();
-
-                // Open the requested file.
-                requestedfile = new FileInputStream(path);
-            } catch (Exception e1) {
-                // In DEBUG to reduce log spam.
-                debug("http_handler File Error: " + e1.getMessage());
-                
-                // 404 error!
-                try {
-                    output.writeBytes(construct_http_header(client, null, 404, -1));
-                    
-                    // FIXME: I tried setting type to 0 (html) and sending a 404
-                    // html but it prepended a Y character to the top for some reason.
-                    // Now instead I just write a 0 and close the connection,
-                    // which makes the browser display its own 404 notice.
-                    // Though, it'd be nice if we could have a custom one.
-                    output.write(0);
+                // If GET or POST, send the file contents.
+                if (method == 1 || method == 3) {
+                    output.write(memoryFile.getBytes());
+                    debug("Sent: " + path);
                 }
-                catch (Exception e2) {
-                    // In DEBUG to reduce log spam.
-                    debug("http_handler Communication Error: " + e2.getMessage());
-                }
-                return;
             }
-
-            // Default MIME type to html.
-            int type_is = 0;
-
-            // Pick the MIME type.
-            if (path.endsWith(".jpg") || path.endsWith(".jpeg")) {
-                type_is = 1;
-            } else if (path.endsWith(".gif")) {
-                type_is = 2;
-            } else if (path.endsWith(".zip")) {
-                type_is = 3;
-            } else if (path.endsWith(".swf")) {
-                type_is = 4;
-            } else if (path.endsWith(".js")) {
-                type_is = 5;
-            } else if (path.endsWith(".css")) {
-                type_is = 6;
-            } else if (path.endsWith(".txt")) {
-                type_is = 7;
-            }
-
-            // Write the 200 OK header.
-            output.writeBytes(construct_http_header(client, path, 200, type_is));
-
-            // If GET or POST, send the file contents.
-            if (method == 1 || method == 3) {
-                while (true) {
-                    int b = requestedfile.read();
-                    if (b == -1) break;
-                    output.write(b);
-                }
+            // Not found?
+            else {
+                output.writeBytes(construct_http_header(client, null, 404, -1));
+                output.write(0);
+                debug("404: " + path);
             }
         }
-        catch (Exception e) {
-            severe("http_handler Communication Error: " + e.getMessage());
+        catch (Exception ex) {
+            // In DEBUG to reduce log spam.
+            debug("Error: " + ex.getMessage());
+
+            // 404 error!
+            output.writeBytes(construct_http_header(client, null, 404, -1));
+
+            // FIXME: I tried setting type to 0 (html) and sending a 404
+            // html but it prepended a Y character to the top for some reason.
+            // Now instead I just write a 0 and close the connection,
+            // which makes the browser display its own 404 notice.
+            // Though, it'd be nice if we could have a custom one.
+            output.write(0);
         }
         finally {
-            try {
-                // Close the output stream if any. Close connection first.
-                if (output != null)
-                    output.close();
-
-                // Close the requested file, if any. Before semaphore close.
-                if (requestedfile != null)
-                    requestedfile.close();
-
-                // Release the semaphore if any.
-                //if (semaphore != null) {
-                //    semaphore.release();
-                //}
-            }
-            catch (Exception e) {
-                severe("http_handler Communication Error: " + e.getMessage());
-            }
+            // Close the output stream if any. Close connection first.
+            if (output != null) output.close();
         }
     }
+    
+    private int getMimeType(String path) {
+        // Default MIME type to html.
+        int mimeType = 0;
 
+        // Pick the MIME type.
+        if (path.endsWith(".jpg") || path.endsWith(".jpeg")) {
+            mimeType = 1;
+        } else if (path.endsWith(".gif")) {
+            mimeType = 2;
+        } else if (path.endsWith(".zip")) {
+            mimeType = 3;
+        } else if (path.endsWith(".swf")) {
+            mimeType = 4;
+        } else if (path.endsWith(".js")) {
+            mimeType = 5;
+        } else if (path.endsWith(".css")) {
+            mimeType = 6;
+        } else if (path.endsWith(".txt")) {
+            mimeType = 7;
+        }
+        return mimeType;
+    }
+    
     private String getStatusString(int code) {
         String s = "500 Internal Server Error";
         switch (code) {
@@ -324,6 +302,10 @@ public class WebServer extends Thread {
     private String getLastModified(String filename) {
             long t = (new File(filename)).lastModified();
             return formatDate(new Date(t), PATTERN_RFC1123);
+    }
+
+    private String getNow() {
+        return formatDate(new Date(), PATTERN_RFC1123);
     }
 
     private String construct_http_header(InetAddress client,
@@ -370,9 +352,10 @@ public class WebServer extends Thread {
                 break;
         }
 
-        if (filename != null) {
-            s += "Last-Modified: " + getLastModified(filename) + "\r\n";
-        }
+        s += "Last-Modified: " + getNow() + "\r\n";
+        //if (filename != null) {
+        //    s += "Last-Modified: " + getLastModified(filename) + "\r\n";
+        //}
         
         return s + "\r\n";
     }

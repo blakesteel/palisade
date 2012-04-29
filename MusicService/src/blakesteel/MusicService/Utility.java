@@ -122,10 +122,16 @@ public class Utility {
         }
     }
     
-    static public void rebuildMusicFolder(Class cls, File musicDir) throws Exception {
+    static public void rebuildMusicFolder(Class cls, File wwwRootDirectory) throws Exception {
+        // The root www path.
+        File musicDir = new File(wwwRootDirectory, "music");
+
         // Images directory in mc/plugins/MusicService/www/music/images path
         File imagesDir = new File(musicDir.getPath(), "images");
 
+        // Create the www root if it doesn't already exist.
+        wwwRootDirectory.mkdir();
+        
         // Delete the music directory.
         Utility.delete(musicDir);
 
@@ -142,5 +148,50 @@ public class Utility {
         extractResource(cls, "snel.swf", musicDir);
         extractResource(cls, "player2.swf", musicDir);
         extractResource(cls, "swf.js", musicDir);
+    }
+    
+    public static byte[] getBytesFromInputStream(InputStream is) throws IOException {
+        long length = is.available();
+
+        if (length > Integer.MAX_VALUE) {
+            throw new IOException("File too large.");
+        }
+
+        byte[] bytes = new byte[(int) length];
+
+        int offset = 0;
+        int numRead = 0;
+        while (offset < bytes.length && (numRead = is.read(bytes, offset, bytes.length - offset)) >= 0) {
+            offset += numRead;
+        }
+
+        if (offset < bytes.length) {
+            throw new IOException("Could not completely read file ");
+        }
+
+        is.close();
+        return bytes;
+    }
+
+    static public byte[] loadFromResourceAsBytes(Class cls, String path) throws IOException {
+        InputStream inp = cls.getResourceAsStream("/contents/" + path);
+        return getBytesFromInputStream(inp);
+    }
+
+    static public String loadFromResourceAsString(Class cls, String path) throws IOException {
+        StringBuilder sb = new StringBuilder();
+        InputStream inputStream = cls.getResourceAsStream("/contents/" + path);
+        if (inputStream != null) {
+            BufferedReader rd = new BufferedReader(new InputStreamReader(inputStream));
+            String s;
+            try {
+                while (null != (s = rd.readLine())) {
+                    sb.append(s + "\n");
+                }
+            } finally {
+                rd.close();
+            }
+        }
+        return sb.toString();
     }
 }

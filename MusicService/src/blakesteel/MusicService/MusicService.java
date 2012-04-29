@@ -121,19 +121,16 @@ public class MusicService extends JavaPlugin {
         info("WWW Port: " + wwwPort);
 
         try {
-            String string = Utility.loadFromResourceAsString(getClass(), "music.html");
-            templateWebFile = new WebMemoryFile(string);
+            templateWebFile = new WebMemoryFile(Utility.loadFromResourceAsString(getClass(), "music.html"));
         } catch (IOException ex) {
             severe("Error: " + ex.getMessage());
         }
 
         webserver = new WebServer();
+        setWebFile("favicon.ico");
+        setWebFile("ffmp3.swf");
         setWebFile("green.png");
         setWebFile("yellow.png");
-        setWebFile("player2.swf");
-        setWebFile("snel.swf");
-        setWebFile("swf.js");
-        setWebFile("favicon.ico");
         webserver.start(wwwPort);
 
         // Plugin is ready at this point.
@@ -375,7 +372,7 @@ public class MusicService extends JavaPlugin {
         // Has factions?
         if (factions != null && factions.isEnabled()) {
             // Get the faction at the player's location, if any.
-            Faction factionLand = null;
+            Faction factionLand;
             
             try {
                 factionLand = SupportFactions.getFactionAtLocation(getServer(), player);
@@ -504,6 +501,14 @@ public class MusicService extends JavaPlugin {
         String playerPath = playerName + ".html";
         String txtPath = playerName + ".txt";
         String playerWebData = templateWebFile.getString();
+
+        String rootUrl;
+        try {
+            rootUrl = "http://" + (new URL(newUrl).toURI().getHost());
+        }
+        catch (Exception ex) {
+            return;
+        }
         
         // Has url? Replace #URL.
         if (newUrl != null)
@@ -512,6 +517,9 @@ public class MusicService extends JavaPlugin {
         // Has player name? Replace #USER.
         if (playerName != null)
             playerWebData = playerWebData.replace("#USER", playerName);
+        
+        // Replace all occurances of #ROOT with the root url.
+        playerWebData = playerWebData.replace("#ROOT", rootUrl);
 
         WebMemoryFile f = new WebMemoryFile(" ");
         webserver.setMemoryValue(txtPath, f);
@@ -608,11 +616,22 @@ public class MusicService extends JavaPlugin {
             newRefreshUrl = refreshUrl + "/";
         }
         
+        String rootUrl;
+        try {
+            rootUrl = "http://" + (new URL(refreshUrl).toURI().getHost());
+        }
+        catch (Exception ex) {
+            return;
+        }
+        
         // Replace all occurances of #USER with the player name in the text.
         String newRefresh = refresh.replace("#USER", playerName);
 
         // Replace all occurances of #REFRESH with the refresh url.
         newRefresh = newRefresh.replace("#REFRESH", newRefreshUrl);
+        
+        // Replace all occurances of #ROOT with the root url.
+        newRefresh = newRefresh.replace("#ROOT", rootUrl);
 
         WebMemoryFile f = new WebMemoryFile(" ");
         f.setEnabled(false);

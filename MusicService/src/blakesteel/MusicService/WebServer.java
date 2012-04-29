@@ -36,11 +36,11 @@ public class WebServer extends Thread {
     private Map<String, WebMemoryFile> memoryMap = new ConcurrentHashMap<String, WebMemoryFile>();
     
     public void setMemoryValue(String path, WebMemoryFile memoryFile) {
-        memoryMap.put(path, memoryFile);
+        memoryMap.put(path.toLowerCase(), memoryFile);
     }
     
     public WebMemoryFile getMemoryValue(String path) {
-        return memoryMap.get(path);
+        return memoryMap.get(path.toLowerCase());
     }
 
     public WebServer() {
@@ -200,7 +200,7 @@ public class WebServer extends Thread {
                 path = "index.html";
             }
 
-            WebMemoryFile memoryFile = memoryMap.get(path);
+            WebMemoryFile memoryFile = memoryMap.get(path.toLowerCase());
             
             // Valid memory file?
             if (memoryFile != null && memoryFile.getEnabled()) {

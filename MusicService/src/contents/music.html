@@ -1,29 +1,27 @@
-<html>
-<head><title>Music Player</title>
+<!DOCTYPE html>
+<html><head><title>Music Player</title>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 <script type="text/javascript">//<![CDATA[
+var STREAM = "#URL";
+var invocation = createCrossDomainRequest();
+var time2 = 0;
+var nled = 0;
 if (document.images) {
     img1 = new Image();
     img1.src = "green.png";
     img2 = new Image();
     img2.src = "yellow.png";
 }
-
-var invocation = createCrossDomainRequest();
-var time2 = 0;
-var nled = 0;
-
 function msieversion() {
    var ua = navigator.userAgent;
    var msie = ua.indexOf("MSIE ");
    if (msie > 0) return parseInt(ua.substring(msie+5, ua.indexOf(".", msie)));
    else return 0;
 }
-
 function updateRequest() {
     clearTimeout(time2);
     time2 = setTimeout("request()", 250);
 }
-
 function createCrossDomainRequest() {
     if (window.XMLHttpRequest) {
         return new window.XMLHttpRequest;
@@ -35,24 +33,20 @@ function createCrossDomainRequest() {
         }
     }
 }
-
 function changeStatus(statusText) {
     document.getElementById('status').innerHTML = statusText;
-
     var iever = msieversion();
-
     if (iever >= 7) {
-        document.getElementById('notes').innerHTML = "IE" + iever + " in use.";
+        document.getElementById('notes').innerHTML = "IE" + iever + " detected.";
     } else {
         if (window.XMLHttpRequest) {
-            document.getElementById('notes').innerHTML = "Chrome, Opera, Firefox or Safari in use.";
+            document.getElementById('notes').innerHTML = "Chrome, Opera, Firefox and Safari should work correctly.";
         }
         else {
             document.getElementById('notes').innerHTML = "Your browser does not support an AJAX that we are aware of.";
         }
     }
 }
-
 function handler(evtXHR) {
     if (invocation.readyState == 4) {
         if (invocation.status != 200) {
@@ -69,11 +63,10 @@ function handler(evtXHR) {
         updateRequest();
     }
 }
-
 function request() {
     try {
         if (invocation) {
-            // Had to change this to a post because IE is retarded as hell and cant do GET properly.
+            // Had to change this to post cause IE is retarded as hell and cant do GET properly.
             invocation.open("POST", "/#USER.txt", true);
             invocation.onreadystatechange = handler;
             invocation.send(null);
@@ -85,65 +78,42 @@ function request() {
         changeStatus('Browser does not support AJAX?');
     }
 }
-
 function updateLed() {
     if (document.images) {
         if (nled == 0) {
-            document["image"].src = eval("img1.src");
+            document.getElementById('image').src = eval("img1.src");
             nled = 1;
         }
         else {
-            document["image"].src = eval("img2.src");
+            document.getElementById('image').src = eval("img2.src");
             nled = 0;
         }
     }
 }
+function writePlayer(url) {
+    document.getElementById('player').innerHTML = "<object classid=\"clsid:D27CDB6E-AE6D-11cf-96B8-444553540000\" width=\"329\" height=\"21\" bgcolor=\"#FFFFFF\"><param name=\"movie\" value=\"ffmp3.swf\" /><param name=\"flashvars\" value=\"url="
+        + url + "&lang=auto&codec=mp3&volume=100&autoplay=true&tracking=false&jsevents=false&buffering=6&title=MusicService\" /><param name=\"wmode\" value=\"window\" /><param name=\"allowscriptaccess\" value=\"always\" /><param name=\"scale\" value=\"noscale\" /><embed src=\"ffmp3.swf\" flashvars=\"url="
+        + url + "&lang=auto&codec=mp3&volume=100&autoplay=true&tracking=false&jsevents=false&buffering=6&title=MusicService\" width=\"329\" scale=\"noscale\" height=\"21\" wmode=\"window\" bgcolor=\"#FFFFFF\" allowscriptaccess=\"always\" type=\"application/x-shockwave-flash\" /></object>";
+}
+function icecastFound() {
+    changeStatus("Icecast protocol assumed.");
+    document.getElementById('shoutcastLogo').style.visibility = "hidden";
+    writePlayer("#URL");
+}
+function shoutcastFound() {
+    changeStatus("Shoutcast protocol assumed.");
+    document.getElementById('icecast').style.visibility = "hidden";
+    writePlayer("#URL/;stream.mp3");
+}
 //]]></script>
-<script type="text/javascript" src="swf.js"></script>
-<script type="text/javascript">
-    document.write('<div id="playercontainer13317470345"><a  href="http://www.adobe.com/shockwave/download/download.cgi?P1_Prod_Version=ShockwaveFlash">Get&nbsp;Flash</a></div>');
-    var head = window.document.getElementsByTagName("head")[0];
-    var script = null;
-    script = window.document.createElement("script");
-    script.type = "text/javascript";
-    script.src = "http://ajax.googleapis.com/ajax/libs/swfobject/2.2/swfobject.js?" + new Date().getTime();
-    head.appendChild(script);
-    script.onload = script.onreadystatechange = function () {
-        swfObjectLoaded();
-    };
-
-    function swfObjectLoaded() {
-        if (swfobject.hasFlashPlayerVersion("9")) {
-            var fn = '&13317470345';
-            var ln = 'stream.mp3';
-            var flashvars = {
-                'skin': 'snel.swf',
-                'title': 'Live Stream',
-                'type': 'sound',
-                'file': '#URL/;' + ln + fn,
-                'duration': '99999',
-                'id': 'scplayer',
-                'autostart': 'true'
-            };
-            var params = {
-                'allowfullscreen': 'false',
-                'allowscriptaccess': 'always',
-                'bgcolor': '#FFFFFF',
-                'wmode': 'transparent'
-            };
-            var attributes = {
-                'id': 'scplayer',
-                'name': 'scplayer'
-            };
-            swfobject.embedSWF('player2.swf', 'playercontainer13317470345', '340', '30', '9.0.124', false, flashvars, params, attributes);
-        }
-    }
-</script>
 </head>
 <body onload="request();">
-<img src="yellow.png" name="image" border="0" width="32" height="32" alt="image">
-<p>User: #USER</p>
-<p>Status: <b id='status'>Ready.</b></p>
-<p>Notes: <b id='notes'>No Notes.</b></p>
+<b id="player"></b>
+<img src="yellow.png" id="image" border="0" width="32" height="32" alt="image"><br>
+User: #USER<br>
+Status: <b id='status'>Ready.</b><br>
+Notes: <b id='notes'>No Notes.</b><br>
+<img src="#ROOT/icecast.png" id="icecast" border="0" width="32" height="24" onload="icecastFound();" onerror="shoutcastFound();" />
+<a href="http://www.shoutcast.com/"><img src="http://www.aolcdn.com/shoutcast/sc_radio_tout.jpg" id="shoutcastLogo" border="0" width="32" height="24"/></a>
 </body>
 </html>

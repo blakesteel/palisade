@@ -88,7 +88,7 @@ public class WebServer extends Thread {
             serversocket = new ServerSocket(port);
             running = true;
         } catch (Exception e) {
-            severe("Error: " + e.getMessage());
+            debug("Error: " + e.getMessage());
             return;
         }
 
@@ -130,14 +130,14 @@ public class WebServer extends Thread {
             output.writeBytes(construct_http_header(client, null, code, -1));
             output.close();
         } catch (Exception e) {
-            severe("Error: " + e.getMessage());
+            debug("Error: " + e.getMessage());
         }
     }
 
-    /*private String getNotFoundHtml(String path) {
+    private String getNotFoundHtml(String path) {
         return "<!DOCTYPE html>\r\n<html>\r\n\r\n    <head>\r\n        <title>Not found</title>\r\n        <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\"/>    \r\n    </head>\r\n    <body>\r\n                            <h1>Not found</h1>\r\n            <p>\r\n                The file "
-                + path + " does not exist\r\n            </p>\r\n            </body>\r\n</html>\r\n";
-    }*/
+                + path + " does not exist\r\n            </p><p>If you are looking for your personal music page you must login to the minecraft server first, then attempt to refresh the page again.</p>\r\n            </body>\r\n</html>\r\n";
+    }
 
     private void http_handler(InetAddress client,
                               BufferedReader input,
@@ -219,7 +219,10 @@ public class WebServer extends Thread {
             // Not found?
             else {
                 output.writeBytes(construct_http_header(client, null, 404, -1));
-                output.write(0);
+                //output.write(0);
+                
+                output.writeBytes(getNotFoundHtml(path));
+                
                 debug("404: " + path);
             }
         }

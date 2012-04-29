@@ -130,6 +130,7 @@ public class MusicService extends JavaPlugin {
         setWebFile("favicon.ico");
         setWebFile("ffmp3.swf");
         setWebFile("green.png");
+        setWebFile("index.html");
         setWebFile("yellow.png");
         webserver.start(wwwPort);
 

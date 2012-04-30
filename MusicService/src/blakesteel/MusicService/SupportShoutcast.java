@@ -22,9 +22,9 @@ public class SupportShoutcast {
         return streams;
     }
     
-    static public List search(URL url) {
+    static public List<StreamInfo> search(URL url) {
         // List of streams.
-        List streams = new ArrayList();
+        List<StreamInfo> streams = new ArrayList<StreamInfo>();
         
         // The search url.
         //String search = String.format(shoutcastSearchUrl, searchString);

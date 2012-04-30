@@ -532,7 +532,7 @@ public class MusicService extends JavaPlugin {
 
         String rootUrl;
         try {
-            rootUrl = "http://" + (new URL(newUrl).toURI().getHost());
+            rootUrl = "http://" + (new URL(newUrl).toURI().getHost()) + ":" + (new URL(newUrl).toURI().getPort());
         } catch (Exception ex) {
             return;
         }

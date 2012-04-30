@@ -9,40 +9,28 @@ database: false
 softdepend: [WorldGuard, Factions, Towny, Regios, iZone]
 
 commands:
-  setmusic:
-    description: Set the music URL at the land at this location.
-    permission: musicservice.setmusic
-    usage: Type /<command> to set the music URL at this location.
-  reloadmusic:
-    description: Reload the music at this location.
-    permission: musicservice.reloadmusic
-    usage: Type /<command> to reload the music at this location.
-  pickmusic:
-    description: Pick the music stream produced by the findmusic command.
-    permission: musicservice.setmusic
-    usage: Type /<command> # to pick the music stream at this location from the findmusic command.
-  findmusic:
+  musicservice:
     description: Find music streams on shoutcast by searching.
-    permission: musicservice.findmusic
-    usage: Type /<command> searchstring to find streams on the shoutcast website.
-
+    usage: Type /<command> to get list of available MusicService commands.
+    aliases: [music, m]
+    
 permissions:
   musicservice.*:
     description: Supports setting of the music stations.
     children:
-      musicservice.setmusic: true
-      musicservice.reloadmusic: true
-      musicservice.pickmusic: true
-      musicservice.findmusic: true
-  musicservice.setmusic:
+      musicservice.set: true
+      musicservice.reload: true
+      musicservice.pick: true
+      musicservice.find: true
+  musicservice.set:
     description: Set the music URL for this location.
-    default: true
-  musicservice.reloadmusic:
+    default: op
+  musicservice.reload:
     description: Reload the music at this location.
-    default: true
-  musicservice.pickmusic:
+    default: op
+  musicservice.pick:
     description: Pick the music stream produced by the findmusic command.
-    default: true
-  musicservice.findmusic:
+    default: op
+  musicservice.find:
     description: Find music streams on shoutcast by searching.
-    default: true
+    default: op

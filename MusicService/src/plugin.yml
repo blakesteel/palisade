@@ -1,5 +1,5 @@
 name: MusicService
-version: 1.4.7
+version: 1.4.8
 description: Provides the ability to stream music.
 author: Palisade
 website: http://dev.bukkit.org/server-mods/musicservice-play-music-anywhere/
@@ -10,9 +10,9 @@ softdepend: [WorldGuard, Factions, Towny, Regios, iZone]
 
 commands:
   musicservice:
-    description: Find music streams on shoutcast by searching.
+    description: Find music streams by searching radio station sites.
     usage: Type /<command> to get list of available MusicService commands.
-    aliases: [music, m]
+    aliases: [music, ms]
     
 permissions:
   musicservice.*:
@@ -21,7 +21,8 @@ permissions:
       musicservice.set: true
       musicservice.reload: true
       musicservice.pick: true
-      musicservice.find: true
+      musicservice.findshout: true
+      musicservice.findice: true
   musicservice.set:
     description: Set the music URL for this location.
     default: op
@@ -31,6 +32,9 @@ permissions:
   musicservice.pick:
     description: Pick the music stream produced by the findmusic command.
     default: op
-  musicservice.find:
+  musicservice.findshout:
     description: Find music streams on shoutcast by searching.
+    default: op
+  musicservice.findice:
+    description: Find music streams on icecast by searching.
     default: op

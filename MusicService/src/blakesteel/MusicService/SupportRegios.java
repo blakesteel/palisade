@@ -8,7 +8,7 @@ import org.bukkit.plugin.Plugin;
  * @author Palisade
  */
 public class SupportRegios {
-    static public Regios getRegios(Server server)
+    static public Regios getPlugin(Server server)
             throws PluginUnavailableException {
         Plugin plugin = server.getPluginManager().getPlugin("Regios");
         

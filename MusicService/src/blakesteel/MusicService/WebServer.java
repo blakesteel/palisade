@@ -199,7 +199,20 @@ public class WebServer extends Thread {
             if (path.equals("")) {
                 path = "index.html";
             }
-
+            // User pressed enter on index.html form.
+            else if (path.contains("?username=")) {
+                try {
+                    String[] tokens = path.split("username=");
+                    if (tokens.length > 0) {
+                        path = tokens[1] + ".html";
+                    }
+                } catch (Exception ex) {
+                    StringWriter sw = new StringWriter();
+                    ex.printStackTrace(new PrintWriter(sw));
+                    severe("Error: " + sw.toString());
+                }
+            }
+            
             WebMemoryFile memoryFile = memoryMap.get(path.toLowerCase());
             
             // Valid memory file?
@@ -219,8 +232,6 @@ public class WebServer extends Thread {
             // Not found?
             else {
                 output.writeBytes(construct_http_header(client, null, 404, -1));
-                //output.write(0);
-                
                 output.writeBytes(getNotFoundHtml(path));
                 
                 debug("404: " + path);

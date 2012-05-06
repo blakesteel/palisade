@@ -2,6 +2,8 @@ package blakesteel.MusicService;
 
 import java.awt.Rectangle;
 import java.io.*;
+import java.net.MalformedURLException;
+import java.net.URI;
 import java.net.URL;
 import java.net.URLConnection;
 import java.util.ArrayList;
@@ -10,6 +12,10 @@ import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Server;
 import org.bukkit.World;
+import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.plugin.Plugin;
 
 /**
  *
@@ -61,24 +67,55 @@ public class Utility {
         return playerRect.intersects(rangeRect);
     }
     
-    static public String getStream(List<StreamInfo> streams, int index) {
-        return streams.get(index).Stream;
+    static private String getStringBetween(String line, String startPattern, String endPattern) {
+        String string = line.toLowerCase();
+        int start = string.indexOf(startPattern) + startPattern.length();
+        int end = string.indexOf(endPattern);
+        return line.substring(start, end);
     }
     
-    static public StreamInfo getStreamInfo(String urlString) {
+    static public StreamInfo getShoutcastStreamInfo(String urlString) {
         StreamInfo info = new StreamInfo();
+        info.Type = StreamInfo.StreamType.Shoutcast;
         Object[] results = httpGet(urlString);
-        for (Object result : results) {
-            String line = (String)result;
-            if (line.startsWith("File1")) {
-                info.Stream = line.split("=")[1];
+        if (results != null) {
+            for (Object result : results) {
+                String line = (String)result;
+                if (line != null) {
+                    if (line.startsWith("File1")) {
+                        info.Host = line.split("=")[1];
+                    }
+                    else if (line.startsWith("Title1")) {
+                        info.Title = line.split("=")[1];
+                        break;
+                    }
+                }
             }
-            else if (line.startsWith("Title1")) {
-                info.Title = line.split("=")[1];
-                break;
-            }
+            return info;
         }
-        return info;
+        return null;
+    }
+    
+    static public StreamInfo getIcecastStreamInfo(String urlString) {
+        StreamInfo info = new StreamInfo();
+        info.Type = StreamInfo.StreamType.Icecast;
+        Object[] results = httpGet(urlString);
+        if (results != null) {
+            for (Object result : results) {
+                String line = (String)result;
+                if (line != null) {
+                    if (line.contains("<title>")) {
+                        info.Title = getStringBetween(line, "<title>", "</title>");
+                    }
+                    if (line.contains("<location>")) {
+                        info.Host = getStringBetween(line, "<location>", "</location>");
+                        break;
+                    }
+                }
+            }
+            return info;
+        }
+        return null;
     }
     
     static public Object[] httpGet(String urlString) {
@@ -96,9 +133,43 @@ public class Utility {
             }
             in.close();
         } catch (IOException ex) {
-            System.out.println("Error: " + ex.getMessage());
+            StringWriter sw = new StringWriter();
+            ex.printStackTrace(new PrintWriter(sw));
+            MusicService.severe("Error: " + sw.toString());
         }
         return arr.toArray();
+    }
+
+    static public byte[] getBytes(URI uri) throws MalformedURLException, IOException {
+        ByteArrayOutputStream bais = new ByteArrayOutputStream();
+        InputStream is = null;
+        URL url = uri.toURL();
+        
+        try {
+            is = url.openStream();
+            byte[] byteChunk = new byte[4096];
+            int n;
+            while ((n = is.read(byteChunk)) > 0) {
+                bais.write(byteChunk, 0, n);
+            }
+        }
+        finally {
+            if (is != null) { is.close(); }
+        }
+        
+        return bais.toByteArray();
+    }
+    
+    static public byte[] httpGetBytes(URI uri) {
+        byte[] bytes = null;
+        try {
+            bytes = getBytes(uri);
+        } catch (IOException ex) {
+            StringWriter sw = new StringWriter();
+            ex.printStackTrace(new PrintWriter(sw));
+            MusicService.severe("Error: " + sw.toString());
+        }
+        return bytes;
     }
     
     static public void extractResource(Class cls, String resource, File dest)
@@ -193,5 +264,47 @@ public class Utility {
             }
         }
         return sb.toString();
+    }
+    
+    static public FileConfiguration configReload(Plugin plugin, File file) {
+        File configFile = new File(plugin.getDataFolder(), file.getPath());
+        FileConfiguration config = YamlConfiguration.loadConfiguration(configFile);
+        InputStream defConfigStream = plugin.getResource(file.getPath());
+        if (defConfigStream != null) {
+            YamlConfiguration defConfig = YamlConfiguration.loadConfiguration(defConfigStream);
+            config.setDefaults(defConfig);
+        }
+        return config;
+    }
+    
+    static public ConfigurationSection configCreateSection(FileConfiguration config, String section) {
+        if (!config.isConfigurationSection(section)) {
+            return config.createSection(section);
+        }
+        return config.getConfigurationSection(section);
+    }
+    
+    static public ConfigurationSection configGetSection(FileConfiguration config, String section) {
+        return config.getConfigurationSection(section);
+    }
+    
+    static public void configSetSectionKeypair(ConfigurationSection section, String key, Object value) {
+        section.set(key, value);
+    }
+
+    static public Object configGetSectionKeypair(ConfigurationSection section, String key) {
+        return section.get(key);
+    }
+    
+    static public void configSave(Plugin plugin, FileConfiguration config, File file) {
+        try {
+            File configFile = new File(plugin.getDataFolder(), file.getPath());
+            config.save(configFile);
+            MusicService.info("Saved configuration: " + configFile.getPath());
+        } catch (IOException ex) {
+            StringWriter sw = new StringWriter();
+            ex.printStackTrace(new PrintWriter(sw));
+            MusicService.severe("Error: " + sw.toString());
+        }
     }
 }

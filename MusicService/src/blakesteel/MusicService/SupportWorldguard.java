@@ -13,7 +13,7 @@ import org.bukkit.plugin.Plugin;
  * @author Palisade
  */
 public class SupportWorldguard {
-    static public WorldGuardPlugin getWorldGuard(Server server)
+    static public WorldGuardPlugin getPlugin(Server server)
             throws PluginUnavailableException {
         Plugin plugin = server.getPluginManager().getPlugin("WorldGuard");
         
@@ -27,7 +27,7 @@ public class SupportWorldguard {
     static public ProtectedRegion getWorldGuardRegionAt(Server server, Player player)
             throws PluginUnavailableException {
         // Get the world guard plugin.
-        WorldGuardPlugin worldGuard = getWorldGuard(server);
+        WorldGuardPlugin worldGuard = getPlugin(server);
 
         // Get the local player.
         LocalPlayer localPlayer = worldGuard.wrapPlayer(player);
@@ -64,7 +64,7 @@ public class SupportWorldguard {
     static public ProtectedRegion isAdminAtWorldGuardRegionAt(Server server, Player player)
             throws PluginUnavailableException {
         // Get the world guard plugin.
-        WorldGuardPlugin worldGuard = getWorldGuard(server);
+        WorldGuardPlugin worldGuard = getPlugin(server);
 
         // Get the local player.
         LocalPlayer localPlayer = worldGuard.wrapPlayer(player);

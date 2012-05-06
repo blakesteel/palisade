@@ -9,7 +9,7 @@ import org.bukkit.plugin.Plugin;
  * @author Palisade
  */
 public class SupportTowny {
-    static public Towny getTowny(Server server)
+    static public Plugin getPlugin(Server server)
             throws PluginUnavailableException {
         Plugin plugin = server.getPluginManager().getPlugin("Towny");
         
@@ -17,6 +17,6 @@ public class SupportTowny {
             throw new PluginUnavailableException();
         }
         
-        return (Towny)plugin;
+        return plugin;
     }
 }

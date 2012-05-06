@@ -1,5 +1,8 @@
 package blakesteel.MusicService;
 
+import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
@@ -9,17 +12,24 @@ import org.bukkit.command.CommandSender;
  * @author Palisade
  */
 public class SupportShoutcast {
-    static final String shoutcastSearchUrl = "http://www.shoutcast.com/Internet-Radio/%s";
+    
+    static public int find(int index, List<StreamInfo> outStreams, CommandSender sender, String searchString)
+            throws URISyntaxException, MalformedURLException {
 
-    static public List<StreamInfo> find(CommandSender sender, URL request) {
-        List<StreamInfo> streams = search(request);
+        URI request = new URI("http", "www.shoutcast.com", "/Internet-Radio/" + searchString, null);
+        List<StreamInfo> streams = search(request.toURL());
+        
         if (streams != null && streams.size() > 0) {
-            int i = 0;
+            sender.sendMessage("[Shoutcast Results]");
+            
+            int i = index;
             for (StreamInfo result : streams) {
                 sender.sendMessage("[" + (i++) + "] " + result.Title);
+                outStreams.add(result);
             }
+            return i;
         }
-        return streams;
+        return 0;
     }
     
     static public List<StreamInfo> search(URL url) {
@@ -27,7 +37,6 @@ public class SupportShoutcast {
         List<StreamInfo> streams = new ArrayList<StreamInfo>();
         
         // The search url.
-        //String search = String.format(shoutcastSearchUrl, searchString);
         String search = url.toString();
         
         // Get the search results.
@@ -47,9 +56,8 @@ public class SupportShoutcast {
                 line.contains("yp.shoutcast") &&    // a shoutcast .pls?
                 !line.contains("ttsl.html"))        // not the ttsl.html
             {
-                
                 // Parse the .pls for the stream info.
-                StreamInfo info = Utility.getStreamInfo(line.split("\"")[1]);
+                StreamInfo info = Utility.getShoutcastStreamInfo(line.split("\"")[1]);
                 
                 if (info != null) {
                     streams.add(info);
@@ -59,48 +67,4 @@ public class SupportShoutcast {
         
         return streams;
     }
-    
-    /*static public List<StreamInfo> find(CommandSender sender, String searchString) {
-        List<StreamInfo> streams = search(searchString);
-        if (streams.size() > 0) {
-            int i = 0;
-            for (StreamInfo result : streams) {
-                sender.sendMessage("[" + (i++) + "] " + result.Title);
-            }
-        }
-        return streams;
-    }
-    
-    static public List search(String searchString) {
-        // List of streams.
-        List streams = new ArrayList();
-        
-        // The search url.
-        String search = String.format(shoutcastSearchUrl, searchString);
-        
-        // Get the search results.
-        Object[] results = Utility.httpGet(search);
-        
-        // Find all of the streams.
-        for (Object result : results) {
-            // A search result line.
-            String line = (String)result;
-            
-            // Valid stream .pls url?
-            if (line.contains("a href") &&          // Is a link?
-                line.contains("yp.shoutcast") &&    // a shoutcast .pls?
-                !line.contains("ttsl.html"))        // not the ttsl.html
-            {
-                
-                // Parse the .pls for the stream info.
-                StreamInfo info = Utility.getStreamInfo(line.split("\"")[1]);
-                
-                if (info != null) {
-                    streams.add(info);
-                }
-            }
-        }
-        
-        return streams;
-    }*/
 }

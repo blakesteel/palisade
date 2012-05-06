@@ -5,11 +5,12 @@ import com.palmergames.bukkit.towny.Towny;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 import couk.Adamki11s.Regios.Regions.GlobalRegionManager;
 import couk.Adamki11s.Regios.Regions.Region;
+import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.net.URI;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,6 +22,8 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
+import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -41,11 +44,14 @@ public class MusicService extends JavaPlugin {
     private Map<String, List<StreamInfo>> playerSearches = new HashMap<String, List<StreamInfo>>();
     private Map<String, String> playerStandingInTown = new HashMap<String, String>();
     private Map<String, Boolean> musicChangeScheduled = new HashMap<String, Boolean>();
+    private Map<String, FileConfiguration> configurations = new HashMap<String, FileConfiguration>();
     private WebMemoryFile templateWebFile = null;
     private String refreshUrl = "http://localhost:8888/";
     private Plugin factions;
     private Plugin regios;
     private Plugin izone;
+    private Plugin worldguard;
+    private Plugin towny;
     private WebServer webserver;
     private int wwwPort = 8888;
     private String refresh = "<meta HTTP-EQUIV=\"REFRESH\" content=\"2; url=#REFRESH" +
@@ -66,7 +72,7 @@ public class MusicService extends JavaPlugin {
     //
     // Bukkit Plugin Events
     //
-    
+
     @Override
     public void onEnable() {
         // Register the music service listener for events.
@@ -74,28 +80,45 @@ public class MusicService extends JavaPlugin {
 
         // Try to hook the towny listener.
         try {
-            Towny towny = SupportTowny.getTowny(getServer());
-            getServer().getPluginManager().registerEvents(new MusicServiceTownyListener(towny, this), this);
+            towny = SupportTowny.getPlugin(getServer());
+            getServer().getPluginManager().registerEvents(new MusicServiceTownyListener((Towny)towny, this), this);
+            addConfig("town");
             info("Hooked Towny Support");
         } catch (PluginUnavailableException ex) {
-            //info("Skipped Towny Support");
         }
         
         // Try to hook the regios support.
         try {
-            regios = SupportRegios.getRegios(getServer());
+            regios = SupportRegios.getPlugin(getServer());
+            addConfig("regios");
             info("Hooked Regios Support");
         } catch (PluginUnavailableException ex) {
-            //info("Skipped Regios Support");
         }
         
         // Try to hook the iZone support.
         try {
-            izone = SupportIZone.getIZone(getServer());
+            izone = SupportIZone.getPlugin(getServer());
+            addConfig("izone");
             info("Hooked iZone Support");
         } catch (PluginUnavailableException ex) {
-            //info("Skipped iZone Support");
         }
+
+        try {
+            // Get the factions plugin, if it exists.
+            factions = SupportFactions.getPlugin(getServer());
+            addConfig("faction");
+            info("Hooked Factions Support");
+        } catch (PluginUnavailableException ex) {
+        }
+        
+        try {
+            worldguard = SupportWorldguard.getPlugin(getServer());
+            addConfig("worldguard");
+            info("Hooked WorldGuard Support");
+        } catch (PluginUnavailableException ex) {
+        }
+
+        addConfig("wilderness");
 
         // Creates a config.yml if there isn't yet one.
         getConfig().options().copyDefaults(true);
@@ -121,9 +144,12 @@ public class MusicService extends JavaPlugin {
         info("WWW Port: " + wwwPort);
 
         try {
-            templateWebFile = new WebMemoryFile(Utility.loadFromResourceAsString(getClass(), "music.html"));
+            String resource = Utility.loadFromResourceAsString(getClass(), "music.html");
+            templateWebFile = new WebMemoryFile(resource);
         } catch (IOException ex) {
-            severe("Error: " + ex.getMessage());
+            StringWriter sw = new StringWriter();
+            ex.printStackTrace(new PrintWriter(sw));
+            severe("Error: " + sw.toString());
         }
 
         webserver = new WebServer();
@@ -136,13 +162,6 @@ public class MusicService extends JavaPlugin {
 
         // Plugin is ready at this point.
         pluginEnabled = true;
-
-        try {
-            // Get the factions plugin, if it exists.
-            factions = SupportFactions.getFactions(getServer());
-        } catch (PluginUnavailableException ex) {
-            severe("Could not find Factions plugin.");
-        }
         
         info(pluginEnabled ? "Enabled" : "Disabled");
     }
@@ -175,155 +194,36 @@ public class MusicService extends JavaPlugin {
             sender.sendMessage("MusicService: Command can only be run by a player.");
             return false;
         }
-        /*
-        // setmusic
-        if (cmd.getName().equalsIgnoreCase("setmusic")) {
-            // Has arguments?
-            if (args.length > 0) {
-                // Set music on faction land.
-                boolean stationSet = setMusicOnFactionLand(player, args);
-                
-                // Has no faction here or no plugin?
-                if (!stationSet) {
-                    stationSet = setTownyStation(player, args);
-                    
-                    // Has no town here or no plugin?
-                    if (!stationSet) {
-                        // Set music in wg region.
-                        stationSet = setWorldGuardStation(player, args);
-
-                        // Has no wg region here or no plugin?
-                        if (!stationSet) {
-                            stationSet = setRegiosStation(player, args);
-
-                            // Has no regios region here or no plugin?
-                            if (!stationSet) {
-                                stationSet = setIZoneStation(player, args);
-                                
-                                // Has no iZone zone here or no plugin?
-                                if (!stationSet) {
-                                    // Set music in the wilderness.
-                                    stationSet = setMusicInWilderness(player, args);
-
-                                    // Only fails without a tower.
-                                    if (!stationSet) {
-                                        sender.sendMessage("No tower here.");
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                return stationSet;
-            }
-            // No arguments.
-            else {
-                player.sendMessage("Command lacked URL argument, e.g. ip:port");
-            }
-        }
-        // reloadmusic
-        else if (cmd.getName().equalsIgnoreCase("reloadmusic")) {
-            player.sendMessage("Reloading music.");
-            
-            // Unset their music file.
-            noPlayerMusic(player);
-
-            // Schedule player station update.
-            Bukkit.getScheduler().scheduleSyncDelayedTask(
-                this,
-                new Runnable(){
-                    @Override
-                    public void run() {
-                        updatePlayerStation(player, player.getLocation());
-                    }
-                },
-                40 // 20 ticks = 1 second
-            );
-
-            return true;
-        }
-        // findmusic
-        else if (cmd.getName().equalsIgnoreCase("findmusic")) {
-            // Has arguments?
-            if (args.length > 0) {
-                // Combine the arguments into one string.
-                URI uri;
-                URL request;
-                
-                String searchString = "";
-                for (String token : args) {
-                    searchString += token + " ";
-                }
-                
-                try {
-                    uri = new URI("http", "www.shoutcast.com", "/Internet-Radio/" + searchString, null);
-                    request = uri.toURL();
-                    
-                    info(player.getName() + " findmusic: " + searchString);
-
-                    // Find the music and get the streams.
-                    List<StreamInfo> streams = SupportShoutcast.find(sender, request);
-                    
-                    if (streams == null) {
-                        player.sendMessage("We are sorry, there were no radio stations matching: " + searchString);
-                        return false;
-                    }
-                    else {
-                        // Track the search results for this player.
-                        playerSearches.put(player.getName(), streams);
-                    }
-                    return true;
-                } catch (Exception ex) {
-                    severe("Error: " + ex.getMessage());
-                }
-            }
-            else {
-                player.sendMessage("Command lacked arguments.");
-            }
-        }
-        else if (cmd.getName().equalsIgnoreCase("pickmusic")) {
-            // Get the player name.
-            String playerName = player.getName();
-            
-            // Player conducted a search?
-            if (playerSearches.containsKey(playerName)) {
-                // Get the streams they found.
-                List<StreamInfo> streams = playerSearches.get(playerName);
-                
-                // Pick the music stream # they wanted.
-                return pickMusic(player, streams, Integer.parseInt(args[0]));
-            } else {
-                player.sendMessage("MusicService: First use: /findmusic <searchstring>");
-            }
-        }
-
-        return false;
-    }
-*/
         if (cmd.getName().equalsIgnoreCase("MusicService")) {
             if (args.length > 0) {
                 // Removing first parameter (command)
                 String[] cmdArgs = new String[args.length - 1];
                 System.arraycopy(args, 1, cmdArgs, 0, args.length - 1);
                 
-                if (args[0].equalsIgnoreCase("find")) { // /music find
+                if (args[0].equalsIgnoreCase("findshout")) { // /music find
                     if (player.hasPermission("musicservice.find"))
-                        return commandFind(player, cmd, cmdArgs);
+                        return commandFindShout(player, cmdArgs);
                 }
-                if (args[0].equalsIgnoreCase("pick")) { // /music pick
+                else if (args[0].equalsIgnoreCase("findice")) { // /music find
+                    if (player.hasPermission("musicservice.find"))
+                        return commandFindIce(player, cmdArgs);
+                }
+                else if (args[0].equalsIgnoreCase("pick")) { // /music pick
                     if (player.hasPermission("musicservice.pick"))
-                        return commandPick(player, cmd, cmdArgs);
+                        return commandPick(player, cmdArgs);
                 }
-                if (args[0].equalsIgnoreCase("set")) { // /music set
+                else if (args[0].equalsIgnoreCase("set")) { // /music set
                     if (player.hasPermission("musicservice.set"))
-                        return commandSet(player, cmd, cmdArgs);
+                        return commandSet(player, cmdArgs);
                 }
-                if (args[0].equalsIgnoreCase("reload")) { // /music reload
+                else if (args[0].equalsIgnoreCase("reload")) { // /music reload
                     if (player.hasPermission("musicservice.reload"))
-                        return commandReload(player, cmd, cmdArgs);
+                        return commandReload(player, cmdArgs);
                 }
-                player.sendMessage("Unknow command");
+                // It might be a known command but you may not have permission, so we need an else here.
+                else {
+                    sendMessage(player, "Unknown command...");
+                }
                 return commandHelp(player);
             } else {
                 return commandHelp(player);
@@ -331,77 +231,140 @@ public class MusicService extends JavaPlugin {
         }
         return false;
     }
-    
-    private boolean commandFind(Player player, Command cmd, String[] args) {
-        
+
+    private boolean commandFindShout(final Player player, String[] args) {
         // Has arguments?
         if (args.length > 0) {
-            // Combine the arguments into one string.
-            URI uri;
-            URL request;
-            
-            String searchString = "";
-            for (String token : args) {
-                searchString += token + " ";
+            String search = "";
+            for (int t=0; t < args.length; t++) {
+                search += args[t] + " ";
             }
             
-            try {
-                uri = new URI("http", "www.shoutcast.com", "/Internet-Radio/"
-                        + searchString, null);
-                request = uri.toURL();
-                
-                info(player.getName() + " findmusic: " + searchString);
-                
-                // Find the music and get the streams.
-                List<StreamInfo> streams = SupportShoutcast.find(player,
-                        request);
-                
-                if (streams == null) {
-                    player.sendMessage("We are sorry, there were no radio stations matching: "
-                            + searchString);
-                    return false;
-                } else {
-                    // Track the search results for this player.
-                    playerSearches.put(player.getName(), streams);
-                }
-                return true;
-            } catch (Exception ex) {
-                severe("Error: " + ex.getMessage());
-            }
+            final String searchString = search;
+            info(player.getName() + " findshout: " + searchString);
+            sendMessage(player, "findshout: " + searchString);
+
+            Bukkit.getScheduler().scheduleSyncDelayedTask(
+                this,
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        List<StreamInfo> streams = new ArrayList<StreamInfo>();
+                        try {
+                            // Find the music and get the streams.
+                            SupportShoutcast.find(0, streams, player, searchString);
+                        } catch (Exception ex) {
+                            StringWriter sw = new StringWriter();
+                            ex.printStackTrace(new PrintWriter(sw));
+                            severe("Error: " + sw.toString());
+                        }
+                        
+                        if (streams.isEmpty()) {
+                            sendMessage(player, "Sorry, there were no stations for: " + searchString);
+                        }
+                        else {
+                            // Track the search results for this player.
+                            playerSearches.put(player.getName(), streams);
+                        }
+                    }
+                },
+                40 // 20 ticks = 1 second
+            );
+            return true; // Return true whether we found a station or not. Command invoked properly.
         } else {
-            player.sendMessage("Command lacked arguments.");
+            sendMessage(player, "Type /music findshout <searchString>");
         }
-        return false;
+        return false; // Missing args? Command invoked improperly.
+    }
+
+    private boolean commandFindIce(final Player player, String[] args) {
+        // Has arguments?
+        if (args.length > 0) {
+            String search = "";
+            for (int t=0; t < args.length; t++) {
+                search += args[t] + " ";
+            }
+            
+            final String searchString = search;
+            info(player.getName() + " findice: " + searchString);
+            sendMessage(player, "findice: " + searchString);
+
+            Bukkit.getScheduler().scheduleSyncDelayedTask(
+                this,
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        List<StreamInfo> streams = new ArrayList<StreamInfo>();
+                        try {
+                            // Find the music and get the streams.
+                            SupportIcecast.find(0, streams, player, searchString);
+                        } catch (Exception ex) {
+                            StringWriter sw = new StringWriter();
+                            ex.printStackTrace(new PrintWriter(sw));
+                            severe("Error: " + sw.toString());
+                        }
+
+                        if (streams.isEmpty()) {
+                            sendMessage(player, "Sorry, there were no stations for: " + searchString);
+                        }
+                        else {
+                            // Track the search results for this player.
+                            playerSearches.put(player.getName(), streams);
+                        }
+                    }
+                },
+                40 // 20 ticks = 1 second
+            );
+            return true; // Return true whether we found a station or not. Command invoked properly.
+        } else {
+            sendMessage(player, "Type /music findice <searchString>");
+        }
+        return false; // Missing args? Command invoked improperly.
     }
     
-    private boolean commandPick(Player player, Command cmd, String[] args) {
+    private boolean commandPick(Player player, String[] args) {
         // Get the player name.
         String playerName = player.getName();
-        
+
+        if (args.length > 0)
+            info(playerName + " picking station: " + args[0]);
+
         // Player conducted a search?
         if (playerSearches.containsKey(playerName)) {
-            // Get the streams they found.
-            List<StreamInfo> streams = playerSearches.get(playerName);
+            debug("Has search results.");
             
-            // Pick the music stream # they wanted.
-            return pickMusic(player, streams, Integer.parseInt(args[0]));
+            // Get the streams they found.
+            List<StreamInfo> infos = playerSearches.get(playerName);
+            
+            debug("Got stream info list.");
+            
+            if (infos != null && infos.size() > 0) {
+                boolean isIcecast = infos.get(0).Type == StreamInfo.StreamType.Icecast;
+                
+                // Pick the music stream # they wanted.
+                pickMusic(player, infos, Integer.parseInt(args[0]), isIcecast);
+
+                debug("picked music");
+            }
+
+            return true;
         } else {
-            player.sendMessage("MusicService: First use: /findmusic <searchstring>");
+            sendMessage(player, "First type: /music <findshout|findice> <searchString>");
         }
         return false;
     }
     
-    private boolean commandSet(Player player, Command cmd, String[] args) {
+    private boolean commandSet(Player player, String[] args) {
         if (args.length > 0) {
-            setStation(player, new String[] { args[0] });
+            setStation(player, new String[] { args[0] }, false);
             return true;
         }
-        player.sendMessage("Usage: /music setmusic http://mycoolstream.net:8080");
+        sendMessage(player, "Type /music set http://yourdomainOrIp.com:8080");
         return false;
     }
     
-    private boolean commandReload(final Player player, Command cmd, String[] args) {
-        player.sendMessage("Reloading music.");
+    private boolean commandReload(final Player player, String[] args) {
+        sendMessage(player, "Reloading music...");
         
         // Unset their music file.
         noPlayerMusic(player);
@@ -422,18 +385,26 @@ public class MusicService extends JavaPlugin {
     }
     
     private boolean commandHelp(Player player) {
-        player.sendMessage("MusicService commands:");
-        if (player.hasPermission("musicservice.find"))
-            player.sendMessage("/music find <Search string>");
+        sendMessage(player, "Commands:");
+        if (player.hasPermission("musicservice.findshout"))
+            sendMessage(player, "/music findshout <searchString>");
+        if (player.hasPermission("musicservice.findice"))
+            sendMessage(player, "/music findice <searchString>");
         if (player.hasPermission("musicservice.pick"))
-            player.sendMessage("/music pick <#>");
+            sendMessage(player, "/music pick <#>");
         if (player.hasPermission("musicservice.set"))
-            player.sendMessage("/music set <URL>");
+            sendMessage(player, "/music set <URL>");
         if (player.hasPermission("musicservice.reload"))
-            player.sendMessage("/music reload");
+            sendMessage(player, "/music reload");
         return true;
     }
-
+    
+    private void sendMessage(Player player, String message) {
+        if (player != null) {
+            player.sendMessage("MusicService: " + message);
+        }
+    }
+    
     //
     // Webserver Routines
     //
@@ -443,7 +414,9 @@ public class MusicService extends JavaPlugin {
             byte[] bytes = Utility.loadFromResourceAsBytes(getClass(), path);
             webserver.setMemoryValue(path, new WebMemoryFile(bytes));
         } catch (IOException ex) {
-            severe("Error: " + ex.getMessage());
+            StringWriter sw = new StringWriter();
+            ex.printStackTrace(new PrintWriter(sw));
+            severe("Error: " + sw.toString());
         }
     }
     
@@ -451,7 +424,7 @@ public class MusicService extends JavaPlugin {
     // Music Stream Support
     //
     
-    private boolean setMusicInWilderness(final Player player, String[] args) {
+    private boolean setMusicInWilderness(final Player player, String[] args, boolean forceIcecast) {
         if (!pluginEnabled) return false;
         
         String regionName = Utility.getWildernessID(player.getLocation());
@@ -461,15 +434,13 @@ public class MusicService extends JavaPlugin {
             // User chose to blank out this parcel.
             if (args[0].equalsIgnoreCase("blank")) {
                 info(String.format("Removing music station for faction: %s", regionName));
-
-                // Set the URL for this chunk in the config to nothing.
-                getConfig().set(regionName,  "");
-                saveConfig();
+                
+                this.saveStation("wilderness", regionName, "", false);
 
                 // Stop the music.
                 noPlayerMusic(player);
 
-                player.sendMessage("Removed music station.");
+                sendMessage(player, "Removed music station.");
 
                 return true;
             }
@@ -479,6 +450,7 @@ public class MusicService extends JavaPlugin {
 
             // Get the URL argument.
             final String url = args[0];
+            final boolean isIcecast = forceIcecast;
 
             // Has URL argument?
             if (url != null) {
@@ -487,7 +459,7 @@ public class MusicService extends JavaPlugin {
                     new Runnable(){
                         @Override
                         public void run(){
-                            setWildernessTowerStation(player, url);
+                            setWildernessTowerStation(player, url, isIcecast);
                         }
                     },
                     40 // 20 ticks = 1 second
@@ -500,7 +472,7 @@ public class MusicService extends JavaPlugin {
         return false;
     }
     
-    private boolean setMusicOnFactionLand(final Player player, String[] args) {
+    private boolean setMusicOnFactionLand(final Player player, String[] args, boolean forceIcecast) {
         if (!pluginEnabled) return false;
 
         // Has factions?
@@ -516,7 +488,7 @@ public class MusicService extends JavaPlugin {
 
             // Does not have faction here?
             if (factionLand == null) {
-                player.sendMessage("Faction did not exist.");
+                sendMessage(player, "Faction did not exist.");
                 return false;
             }
 
@@ -537,7 +509,7 @@ public class MusicService extends JavaPlugin {
                 try {
                     // Player was not the faction admin? Bail out.
                     if (!SupportFactions.isPlayerFactionAdmin(getServer(), factionLand, player)) {
-                        player.sendMessage("This is not your faction land.");
+                        sendMessage(player, "This is not your faction land.");
                         return false;
                     }
                 } catch (PluginUnavailableException ex) {
@@ -549,7 +521,7 @@ public class MusicService extends JavaPlugin {
             if (!isWilderness) {
                 // User chose to blank out this parcel.
                 if (args[0].equalsIgnoreCase("blank")) {
-                    setStation("faction", regionName, player, "");
+                    setStation("faction", regionName, player, "", forceIcecast);
                     return true;
                 }
 
@@ -559,6 +531,7 @@ public class MusicService extends JavaPlugin {
                 // Get the URL argument.
                 final String url = args[0];
                 final Faction faction = factionLand;
+                final boolean isIcecast = forceIcecast;
 
                 // Has URL argument?
                 if (url != null) {
@@ -567,7 +540,7 @@ public class MusicService extends JavaPlugin {
                         new Runnable(){
                             @Override
                             public void run(){
-                                setFactionStation(faction, player, url);
+                                setFactionStation(faction, player, url, isIcecast);
                             }
                         },
                         40 // 20 ticks = 1 second
@@ -581,49 +554,116 @@ public class MusicService extends JavaPlugin {
         return false;
     }
     
-    private boolean pickMusic(final Player player, List<StreamInfo> streams, int index) {
+    private void pickMusic(final Player player, List<StreamInfo> streams, final int index, final boolean isIcecast) {
+        debug("pickMusic()");
+        
         if (streams.size() > 0) {
-            String ipPort = Utility.getStream(streams, index);
-            String[] args = new String[] {ipPort};
+            debug("has streams");
+            
+            final StreamInfo info = streams.get(index);
+            final String[] args = new String[] {info.Host};
+            
+            Bukkit.getScheduler().scheduleSyncDelayedTask(
+                this,
+                new Runnable(){
+                    @Override
+                    public void run() {
+                        try {
+                            //Stream mainStream = null;
+                            //URI uri = new URI(info.Host);
+                            //List<Stream> iceStreams;
+                            //List<Stream> shoutStreams;
+                            /*IceCastScraper iceScraper = new IceCastScraper();
+                            ShoutCastScraper shoutScraper = new ShoutCastScraper();
+                            
+                            try {
+                                iceStreams = iceScraper.scrape(uri);
+                                isIcecast = iceStreams.size() > 0;
+                                
+                                for (Stream stream : iceStreams) {
+                                    if (stream.getUri().toURL().toString().equals(uri.toURL().toString())) {
+                                        mainStream = stream;
+                                        break;
+                                    }
+                                }
+                            } catch (ScrapeException ex) {
+                                isIcecast = false;
+                            }
 
-            info("Setting music stream [" + index + "]: " + ipPort);
+                            if (!isIcecast) {
+                                try {
+                                    shoutStreams = shoutScraper.scrape(uri);
+                                    isIcecast = false;
 
-            return setStation(player, args);
+                                    for (Stream stream : shoutStreams) {
+                                        if (stream.getUri().toURL().toString().equals(uri.toURL().toString())) {
+                                            mainStream = stream;
+                                            break;
+                                        }
+                                    }
+                                } catch (ScrapeException ex) {
+                                }
+                            }
+
+                            info("Station [" + index + "]: " + mainStream.toString());
+                            sendMessage(player, "Station [" + index + "]: " + mainStream.toString());*/
+
+                            debug("setStation()");
+                            setStation(player, args, isIcecast);
+                        }
+                        catch (Exception ex) {
+                            debug("Error: " + ex.getMessage());
+                        }
+                    }
+                },
+                40 // 20 ticks = 1 second
+            );
         }
-        return false;
     }
 
-    private boolean setStation(Player player, String[] args) {
+    private boolean setStation(Player player, String[] args, boolean forceIcecast) {
         // Set music on faction land.
-        debug("faction land");
-        if (setMusicOnFactionLand(player, args)) return true;
+        if (setMusicOnFactionLand(player, args, forceIcecast)) {
+            debug("Factions land");
+            return true;
+        }
         
         // Set music on town
-        debug("Towny");
-        if (setTownyStation(player, args)) return true;
+        if (setTownyStation(player, args, forceIcecast)) {
+            debug("Towny town");
+            return true;
+        }
         
         // Set music on wg region.
-        debug("worldguard");
-        if (setWorldGuardStation(player, args)) return true;
+        if (setWorldGuardStation(player, args, forceIcecast)) {
+            debug("WorldGuard region");
+            return true;
+        }
         
         // Set music on regios region.
-        debug("regios");
-        if (setRegiosStation(player, args)) return true;
+        if (setRegiosStation(player, args, forceIcecast)) {
+            debug("Regios region");
+            return true;
+        }
         
         // Set music on iZone zone
-        debug("iZone");
-        if (setIZoneStation(player, args)) return true;
+        if (setIZoneStation(player, args, forceIcecast)) {
+            debug("iZone zone");
+            return true;
+        }
         
         // Set music on wilderness.
-        debug("wilderness");
-        if (setMusicInWilderness(player, args)) return true;
+        if (setMusicInWilderness(player, args, forceIcecast)) {
+            debug("Wilderness");
+            return true;
+        }
         
         // Only fails without a tower.
-        player.sendMessage("No tower here.");
+        sendMessage(player, "No tower here.");
         return false;
     }
     
-    private void setMusicStation(Player player, String url) throws IOException {
+    private void setMusicStation(Player player, String url, boolean forceIcecast) throws IOException {
         if (!pluginEnabled) return;
         
         String playerName = player.getName();
@@ -652,6 +692,9 @@ public class MusicService extends JavaPlugin {
         // Replace all occurances of #ROOT with the root url.
         playerWebData = playerWebData.replace("#ROOT", rootUrl);
 
+        // Has icecast? If yes, force it.
+        playerWebData = playerWebData.replace("#ISICECAST", (forceIcecast) ? "1" : "0");
+
         WebMemoryFile f = new WebMemoryFile(" ");
         webserver.setMemoryValue(txtPath, f);
 
@@ -662,23 +705,13 @@ public class MusicService extends JavaPlugin {
         playerStations.put(player.getName(), newUrl);
     }
     
-    private void changePlayerMusic(final Player player, final String url) {
+    private void changePlayerMusic(final Player player, final String url, boolean forceIcecast) {
         if (!pluginEnabled) return;
         
-        //debug("changePlayerMusic: " + url);
-        
-        // No station, turn off music and return.
-        /*if (url.equals("")) {
-            debug("no station");
-            noPlayerMusic(player);
-            return;
-        }*/
-
         // Player is on a station?
         if (playerStations.containsKey(player.getName())) {
             // Station already matches the one we're changing to?
             if (playerStations.get(player.getName()).equals(url)) {
-                //debug("player already on station");
                 // Done.
                 return;
             }
@@ -695,10 +728,10 @@ public class MusicService extends JavaPlugin {
             // Schedule a change.
             musicChangeScheduled.put(player.getName(), true);
 
-            //debug("stopping music...pending station change..");
-            
             // Turn off the music to flag the .txt file for the ajax to reset.
             noPlayerMusic(player);
+            
+            final boolean isIcecast = forceIcecast;
 
             // Schedule the task.
             Bukkit.getScheduler().scheduleSyncDelayedTask(
@@ -708,7 +741,7 @@ public class MusicService extends JavaPlugin {
                     public void run(){
                         try {
                             //debug("setting music station...");
-                            setMusicStation(player, url);
+                            setMusicStation(player, url, isIcecast);
                         } catch (IOException ex) {
                             severe(ex.getMessage());
                         }
@@ -822,7 +855,7 @@ public class MusicService extends JavaPlugin {
     //
     
     private boolean handleFactions(Player player, Location location) {
-        if (!pluginEnabled) return false;
+        if (!pluginEnabled || factions == null) return false;
         
         // Faction exists?
         if (factions != null && factions.isEnabled()) {
@@ -840,7 +873,7 @@ public class MusicService extends JavaPlugin {
                 // Has region and it's not Wilderness, therfore it is faction land?
                 if (regionName != null) {
                     if (!regionName.contains("Wilderness")) {
-                        return listenStation("faction", regionName, player);
+                        return listenStation("faction", regionName, player, false);
                     }
                 }
             }
@@ -849,14 +882,14 @@ public class MusicService extends JavaPlugin {
         return false;
     }
 
-    private boolean setFactionStation(Faction faction, Player player, String url) {
-        if (!pluginEnabled) return false;
+    private boolean setFactionStation(Faction faction, Player player, String url, boolean forceIcecast) {
+        if (!pluginEnabled || factions == null) return false;
         
         // Get the faction region name.
         String regionName = faction.getTag();
 
         if (regionName != null) {
-            setStation("faction", regionName, player, url);
+            setStation("faction", regionName, player, url, forceIcecast);
             return true;
         }
         
@@ -876,7 +909,7 @@ public class MusicService extends JavaPlugin {
             Location location = Utility.stringToLocation(getServer(), locationString);
             
             if (Utility.towerIntersects(location, radius, player.getLocation())) {
-                return listenStation("wilderness", locationString, player);
+                return listenStation("wilderness", locationString, player, false);
             }
         }
         
@@ -886,7 +919,7 @@ public class MusicService extends JavaPlugin {
         return false;
     }
     
-    private boolean setWildernessTowerStation(Player player, String url) {
+    private boolean setWildernessTowerStation(Player player, String url, boolean forceIcecast) {
         if (!pluginEnabled) return false;
         
         for (String locationString : radioTowers.keySet()) {
@@ -899,7 +932,7 @@ public class MusicService extends JavaPlugin {
             if (Utility.towerIntersects(location, radius, player.getLocation())) {
                 if (url != null) {
                     radioStations.put(locationString, url);
-                    setStation("wilderness", locationString, player, url);
+                    setStation("wilderness", locationString, player, url, forceIcecast);
                     return true;
                 }
             }
@@ -913,7 +946,7 @@ public class MusicService extends JavaPlugin {
     //
 
     private boolean handleWorldGuard(Player player) {
-        if (!pluginEnabled) return false;
+        if (!pluginEnabled || worldguard == null) return false;
 
         // Has player?
         if (player != null) {
@@ -921,7 +954,7 @@ public class MusicService extends JavaPlugin {
                 ProtectedRegion stationRegion = SupportWorldguard.getWorldGuardRegionAt(getServer(), player);
                 
                 if (stationRegion != null) {
-                    return listenStation("worldguard", stationRegion.getId(), player);
+                    return listenStation("worldguard", stationRegion.getId(), player, false);
                 }
             }
             catch (PluginUnavailableException ex) {
@@ -932,8 +965,8 @@ public class MusicService extends JavaPlugin {
         return false;
     }
     
-    private boolean setWorldGuardStation(Player player, String[] args) {
-        if (!pluginEnabled) return false;
+    private boolean setWorldGuardStation(Player player, String[] args, boolean forceIcecast) {
+        if (!pluginEnabled || worldguard == null) return false;
         
         try {
             ProtectedRegion stationRegion =
@@ -942,16 +975,15 @@ public class MusicService extends JavaPlugin {
             // Has a station region?
             if (stationRegion != null) {
                 if (args[0].equalsIgnoreCase("blank"))
-                    setStation("worldguard", stationRegion.getId(), player, "");
+                    setStation("worldguard", stationRegion.getId(), player, "", forceIcecast);
                 else
-                    setStation("worldguard", stationRegion.getId(), player, args[0]);
+                    setStation("worldguard", stationRegion.getId(), player, args[0], forceIcecast);
                 
                 return true;
             }
         }
         catch (PluginUnavailableException ex) {
             // Quietly fail if there is no WorldGuard, user may have chosen not to install it.
-            //debug("No worldguard detected.");
         }
         
         return false;
@@ -961,29 +993,8 @@ public class MusicService extends JavaPlugin {
     // Towny Advanced Support
     //
     
-    /*public void onTownyPlayerMoveChunk(Player player, WorldCoord from, WorldCoord to,
-                                  Location fromLoc, Location toLoc) {
-        TownBlock block;
-        try {
-            block = to.getWorld().getTownBlock(to.getX(), to.getZ());
-        
-            if (block != null && block.hasTown()) {
-                Town town = block.getTown();
-                String townName = town.getName();
-                //debug("TOWN: " + townName);
-                playerNowStandingInTown(player, townName);
-                handleTowny(player);
-            }
-            else {
-                playerNowStandingInTown(player, null);
-            }
-        } catch (NotRegisteredException ex) {
-            playerNowStandingInTown(player, null);
-        }
-    }*/
-    
     public boolean handleTowny(Player player) {
-        if (!pluginEnabled) return false;
+        if (!pluginEnabled || towny == null) return false;
 
         try {
             // Has player?
@@ -992,8 +1003,7 @@ public class MusicService extends JavaPlugin {
 
                 // Has town here?
                 if (name != null) {
-                    //debug("has town here: " + name);
-                    return listenStation("town", name, player);
+                    return listenStation("town", name, player, false);
                 }
                 else {
                     //debug("no town found here");
@@ -1004,14 +1014,13 @@ public class MusicService extends JavaPlugin {
             // Fail silently. Might mean towny not installed, or no town here.
             StringWriter sw = new StringWriter();
             ex.printStackTrace(new PrintWriter(sw));
-            //debug("Error handleTowny: " + sw.toString());
         }
 
         return false;
     }
     
-    private boolean setTownyStation(Player player, String[] args) {
-        if (!pluginEnabled) return false;
+    private boolean setTownyStation(Player player, String[] args, boolean forceIcecast) {
+        if (!pluginEnabled || towny == null) return false;
         
         try {
             String name = getTownPlayerIsStandingIn(player);
@@ -1019,16 +1028,15 @@ public class MusicService extends JavaPlugin {
             // Has town info?
             if (name != null) {
                 if (args[0].equalsIgnoreCase("blank"))
-                    setStation("town", name, player, "");
+                    setStation("town", name, player, "", forceIcecast);
                 else
-                    setStation("town", name, player, args[0]);
+                    setStation("town", name, player, args[0], forceIcecast);
 
                 return true;
             }
         }
         catch (Exception ex) {
             // Fail silently. No plugin or no town here.
-            //debug("Error setTownyStation: " + ex.getMessage());
         }
         
         return false;
@@ -1050,63 +1058,6 @@ public class MusicService extends JavaPlugin {
     }
     
     //
-    // Station Support
-    //
-    
-    private String getFieldName(String prefix, String name) {
-        return prefix + "-" + name;
-    }
-    
-    private void setStation(String prefix, String name, Player player, String station) {
-        String fieldName = getFieldName(prefix, name);
-
-        // Set the URL for the field in the config.
-        getConfig().set(fieldName, station);
-        saveConfig();
-
-        if (station.equals("")) {
-            // Stop the music.
-            noPlayerMusic(player);
-
-            player.sendMessage(String.format("Removed music station for: %s", fieldName));
-        }
-        else {
-            // Change the player's music to the URL specified immediately.
-            changePlayerMusic(player, station);
-
-            player.sendMessage(String.format("Set Music Station: %s", station));
-        }
-    }
-    
-    private boolean listenStation(String prefix, String name, Player player) {
-        if (player != null) {
-            String fieldName = getFieldName(prefix, name);
-
-            // Config holds an entry for the station?
-            if (getConfig().contains(fieldName)) {
-                // Get the station url.
-                String url = (String)getConfig().get(fieldName);
-
-                if (url != null) {
-                    //debug(String.format("Changing station for %s in %s to %s", player.getName(), fieldName, url));
-
-                    // Change the player music to the url for this station.
-                    changePlayerMusic(player, url);
-
-                    return true;
-                }
-            }
-            // No entry at this chunk.
-            else {
-                // No music at this chunk.
-                noPlayerMusic(player);
-            }
-        }
-        
-        return false;
-    }
-    
-    //
     // Regios Support
     //
     
@@ -1122,7 +1073,7 @@ public class MusicService extends JavaPlugin {
                 if (region != null) {
                     String name = region.getName();
                     //debug("has regios here: " + name);
-                    return listenStation("regios", name, player);
+                    return listenStation("regios", name, player, false);
                 }
                 else {
                     //debug("no regios found here");
@@ -1133,13 +1084,12 @@ public class MusicService extends JavaPlugin {
             // Fail silently. Might mean regios not installed, or no region here.
             StringWriter sw = new StringWriter();
             ex.printStackTrace(new PrintWriter(sw));
-            //debug("Error handleRegios: " + sw.toString());
         }
 
         return false;
     }
     
-    private boolean setRegiosStation(Player player, String[] args) {
+    private boolean setRegiosStation(Player player, String[] args, boolean forceIcecast) {
         if (!pluginEnabled || regios == null) return false;
         
         try {
@@ -1152,16 +1102,15 @@ public class MusicService extends JavaPlugin {
                 //debug(String.format("setRegiosStation: %s %s %s", player.getName(), name, args[0]));
                 
                 if (args[0].equalsIgnoreCase("blank"))
-                    setStation("regios", name, player, "");
+                    setStation("regios", name, player, "", forceIcecast);
                 else
-                    setStation("regios", name, player, args[0]);
+                    setStation("regios", name, player, args[0], forceIcecast);
 
                 return true;
             }
         }
         catch (Exception ex) {
             // Fail silently. No plugin or no region here.
-            //debug("Error setRegiosStation: " + ex.getMessage());
         }
         
         return false;
@@ -1183,7 +1132,7 @@ public class MusicService extends JavaPlugin {
                 if (zone != null) {
                     String name = zone.getName();
                     //debug("has zone here: " + name);
-                    return listenStation("izone", name, player);
+                    return listenStation("izone", name, player, false);
                 }
                 else {
                     //debug("no zone found here");
@@ -1194,13 +1143,12 @@ public class MusicService extends JavaPlugin {
             // Fail silently. Might mean iZone not installed, or no zone here.
             StringWriter sw = new StringWriter();
             ex.printStackTrace(new PrintWriter(sw));
-            //debug("Error handleIZone: " + sw.toString());
         }
 
         return false;
     }
     
-    private boolean setIZoneStation(Player player, String[] args) {
+    private boolean setIZoneStation(Player player, String[] args, boolean forceIcecast) {
         if (!pluginEnabled || izone == null) return false;
         
         try {
@@ -1213,9 +1161,9 @@ public class MusicService extends JavaPlugin {
                 //debug(String.format("setIZoneStation: %s %s %s", player.getName(), name, args[0]));
                 
                 if (args[0].equalsIgnoreCase("blank"))
-                    setStation("izone", name, player, "");
+                    setStation("izone", name, player, "", forceIcecast);
                 else
-                    setStation("izone", name, player, args[0]);
+                    setStation("izone", name, player, args[0], forceIcecast);
 
                 return true;
             }
@@ -1226,5 +1174,169 @@ public class MusicService extends JavaPlugin {
         }
         
         return false;
+    }
+    
+    //
+    // Station Support
+    //
+    
+    private String getConfigurationName(String prefix) {
+        return prefix + ".yml";
+    }
+    
+    private String getFieldName(String prefix, String name) {
+        return prefix + "-" + name;
+    }
+
+    private StreamInfo loadStation(String prefix, String fieldName) {
+        StreamInfo info = null;
+        
+        // Has the configuration file in the configuration map?
+        if (configurations.containsKey(prefix)) {
+            // Get the configuration file.
+            FileConfiguration stationConfig = configurations.get(prefix);
+        
+            // Has configuration file?
+            if (stationConfig != null) {
+                // Create the stations configuration section if it does not already exist.
+                ConfigurationSection stationSection = Utility.configCreateSection(stationConfig, "stations");
+
+                if (stationSection != null) {
+                    debug("Has Section: stations");
+                    
+                    String station = (String)Utility.configGetSectionKeypair(stationSection, fieldName);
+                    
+                    if (station != null) {
+                        String type = (String)Utility.configGetSectionKeypair(stationSection, fieldName + "-type");
+
+                        boolean isIcecast = false;
+
+                        if (type != null) {
+                            if (type.equalsIgnoreCase("icecast")) {
+                                isIcecast = true;
+                            }
+                        }
+
+                        info = new StreamInfo();
+                        info.Host = station;
+                        info.Type = (isIcecast) ? StreamInfo.StreamType.Icecast : StreamInfo.StreamType.Shoutcast;
+
+                        debug("Loaded configuration.");
+                    }
+                }
+            }
+        }
+        return info;
+    }
+    
+    private void saveStation(String prefix, String fieldName, String station, boolean isIcecast) {
+        debug("saveStation()");
+        // Has the configuration file in the configuration map?
+        if (configurations.containsKey(prefix)) {
+            // Get the configuration file name.
+            String configurationName = getConfigurationName(prefix);
+            debug("Configuration Name: " + configurationName);
+            
+            // Form the yml station file.
+            File stationFile = new File(configurationName);
+
+            debug("Getting station config from configurations.");
+            
+            // Get the configuration file.
+            FileConfiguration stationConfig = configurations.get(prefix);
+        
+            // Has configuration file?
+            if (stationConfig != null) {
+                debug("Found station config in configurations. Getting stations section...");
+                
+                // Create the stations configuration section if it does not already exist.
+                ConfigurationSection stationSection = Utility.configCreateSection(stationConfig, "stations");
+
+                if (stationSection != null) {
+                    debug("Has Section: stations");
+                    
+                    // Set a key value pair in the station section.
+                    Utility.configSetSectionKeypair(stationSection, fieldName, station);
+                    
+                    if (isIcecast) {
+                        Utility.configSetSectionKeypair(stationSection, fieldName + "-type", "icecast");
+                    }
+                    else {
+                        Utility.configSetSectionKeypair(stationSection, fieldName + "-type", "shoutcast");
+                    }
+
+                    // Save the configuration yml file for our stations.
+                    Utility.configSave(this, stationConfig, stationFile);
+                    
+                    debug("Saved configuration.");
+                }
+            }
+        }
+    }
+    
+    private void setStation(String prefix, String name, Player player, String station, boolean forceIcecast) {
+        String fieldName = getFieldName(prefix, name);
+        
+        saveStation(prefix, fieldName, station, forceIcecast);
+        
+        if (station.equals("")) {
+            // Stop the music.
+            noPlayerMusic(player);
+
+            sendMessage(player, String.format("Removed music station for: %s", fieldName));
+        }
+        else {
+            // Change the player's music to the URL specified immediately.
+            changePlayerMusic(player, station, forceIcecast);
+
+            sendMessage(player, String.format("Set Music Station: %s", station));
+        }
+    }
+    
+    private boolean listenStation(String prefix, String name, Player player, boolean forceIcecast) {
+        debug("listenStation()");
+        if (player != null) {
+            debug("has player");
+            String fieldName = getFieldName(prefix, name);
+            debug("prefix: " + prefix + " fieldName: " + fieldName + " Loading station...");
+
+            StreamInfo info = loadStation(prefix, fieldName);
+            
+            // Config holds an entry for the station?
+            if (info != null) {
+                debug("has station");
+
+                // Get the station url.
+                String url = info.Host;
+
+                if (url != null) {
+                    debug("has url");
+                    
+                    boolean isIcecast = info.Type == StreamInfo.StreamType.Icecast || forceIcecast;
+
+                    debug(String.format("Changing station for %s in %s to %s, isIcecast = %s", player.getName(), fieldName, url, (isIcecast) ? "yes" : "no"));
+
+                    // Change the player music to the url for this station.
+                    changePlayerMusic(player, url, isIcecast);
+
+                    return true;
+                }
+            }
+            // No entry at this chunk.
+            else {
+                debug("no player music here");
+                // No music at this chunk.
+                noPlayerMusic(player);
+            }
+        }
+        
+        return false;
+    }
+    
+    private void addConfig(String configName) {
+        File stationFile = new File(getConfigurationName(configName));
+        FileConfiguration stationConfig = Utility.configReload(this, stationFile);
+        configurations.put(configName, stationConfig);
+        debug("added config for: " + configName);
     }
 }

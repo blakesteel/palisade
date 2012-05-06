@@ -13,7 +13,7 @@ import org.bukkit.plugin.Plugin;
  * @author Palisade
  */
 public class SupportFactions {
-    static public Plugin getFactions(Server server) throws PluginUnavailableException {
+    static public Plugin getPlugin(Server server) throws PluginUnavailableException {
         Plugin plugin = server.getPluginManager().getPlugin("Factions");
         
         if (plugin == null) {
@@ -26,7 +26,7 @@ public class SupportFactions {
     static public Faction getFactionAtLocation(Server server, Player player)
             throws PluginUnavailableException
     {
-        Plugin factions = getFactions(server);
+        Plugin factions = getPlugin(server);
         
         if (factions != null) {
             // Get a faction located at the player's position.
@@ -38,7 +38,7 @@ public class SupportFactions {
     
     static public Faction getFactionAtLocation(Server server, Location location)
             throws PluginUnavailableException {
-        Plugin factions = getFactions(server);
+        Plugin factions = getPlugin(server);
 
         if (factions != null) {
             // Get a faction located at the player's position.
@@ -50,7 +50,7 @@ public class SupportFactions {
 
     static public boolean isPlayerFactionAdmin(Server server, Faction faction, Player player)
             throws PluginUnavailableException {
-        Plugin factions = getFactions(server);
+        Plugin factions = getPlugin(server);
         
         if (factions != null) {
             // Faction exists?

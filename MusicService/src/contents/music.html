@@ -2,6 +2,7 @@
 <html><head><title>Music Player</title>
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 <script type="text/javascript">//<![CDATA[
+var forceIcecast = #ISICECAST;
 var STREAM = "#URL";
 var invocation = createCrossDomainRequest();
 var time2 = 0;
@@ -78,6 +79,14 @@ function request() {
         changeStatus('Browser does not support AJAX?');
     }
 }
+function beginload() {
+    if (forceIcecast == 1) {
+        changeStatus("Icecast protocol assumed.");
+        document.getElementById('shoutcastLogo').style.visibility = "hidden";
+        writePlayer("#URL");
+    }
+    request();
+}
 function updateLed() {
     if (document.images) {
         if (nled == 0) {
@@ -96,24 +105,27 @@ function writePlayer(url) {
         + url + "&lang=auto&codec=mp3&volume=100&autoplay=true&tracking=false&jsevents=false&buffering=6&title=MusicService\" width=\"329\" scale=\"noscale\" height=\"21\" wmode=\"window\" bgcolor=\"#FFFFFF\" allowscriptaccess=\"always\" type=\"application/x-shockwave-flash\" /></object>";
 }
 function icecastFound() {
+    if (forceIcecast == 1) return;
     changeStatus("Icecast protocol assumed.");
     document.getElementById('shoutcastLogo').style.visibility = "hidden";
     writePlayer("#URL");
 }
 function shoutcastFound() {
+    if (forceIcecast == 1) return;
     changeStatus("Shoutcast protocol assumed.");
-    document.getElementById('icecast').style.visibility = "hidden";
+    document.getElementById('iceLogo').style.visibility = "hidden";
     writePlayer("#URL/;stream.mp3");
 }
 //]]></script>
 </head>
-<body onload="request();">
+<body onload="beginload();">
 <b id="player"></b>
 <img src="yellow.png" id="image" border="0" width="32" height="32" alt="image"><br>
 User: #USER<br>
 Status: <b id='status'>Ready.</b><br>
 Notes: <b id='notes'>No Notes.</b><br>
-<img src="#ROOT/icecast.png" id="icecast" border="0" width="32" height="24" onload="icecastFound();" onerror="shoutcastFound();" />
+<img src="http://www.icecast.org/images/icecast.png" id="iceLogo" border="0" width="32" height="24" />
 <a href="http://www.shoutcast.com/"><img src="http://www.aolcdn.com/shoutcast/sc_radio_tout.jpg" id="shoutcastLogo" border="0" width="32" height="24"/></a>
+<img src="#ROOT/icecast.png" id="icecast" border="0" width="32" height="24" onload="icecastFound();" onerror="shoutcastFound();" style="visibility:hidden" />
 </body>
 </html>

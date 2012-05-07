@@ -1,0 +1,23 @@
+name: Collapse
+version: 1.0.0
+description: Cave-in ported to the latest bukkit release.
+author: Palisade
+website: http://dev.bukkit.org/server-mods/collapse/
+
+main: blakesteel.Collapse.Collapse
+database: false
+
+commands:
+  collapse:
+    description: Collapse commands.
+    usage: Type /<command> to access Collapse commands.
+    aliases: [cl]
+    
+permissions:
+  collapse.*:
+    description: Some command.
+    children:
+      collapse.something: true
+  collapse.something:
+    description: Some command.
+    default: op

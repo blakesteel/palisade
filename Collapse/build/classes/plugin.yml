@@ -1,11 +1,12 @@
 name: Collapse
-version: 1.0.0
+version: 1.0.1
 description: Cave-in ported to the latest bukkit release.
 author: Palisade
 website: http://dev.bukkit.org/server-mods/collapse/
 
 main: blakesteel.Collapse.Collapse
 database: false
+softdepend: [WorldGuard, Factions, Towny, Regios, iZone]
 
 commands:
   collapse:

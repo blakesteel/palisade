@@ -1,10 +1,21 @@
 package blakesteel.Collapse;
 
+import com.massivecraft.factions.Faction;
+import com.palmergames.bukkit.towny.Towny;
+import com.sk89q.worldguard.protection.regions.ProtectedRegion;
+import couk.Adamki11s.Regios.Regions.GlobalRegionManager;
+import couk.Adamki11s.Regios.Regions.Region;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import net.techguard.izone.managers.ZoneManager;
+import net.techguard.izone.zones.Zone;
+import org.bukkit.Location;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
@@ -15,15 +26,12 @@ public class Collapse extends JavaPlugin {
     private static final Logger logger = Logger.getLogger("Minecraft");
     private static final String LOG_PREFIX = "[Collapse] ";
     private boolean pluginEnabled = false;
-    //public PluginDescriptionFile pdfFile;
-    //public static PermissionHandler Permissions;
-    //public static boolean permissionsEnabled = false;
-    //private Map<String, FileConfiguration> configurations = new HashMap<String, FileConfiguration>();
-    //private Plugin factions;
-    //private Plugin regios;
-    //private Plugin izone;
-    //private Plugin worldguard;
-    //private Plugin towny;
+    private Map<String, String> playerStandingInTown = new HashMap<String, String>();
+    private Plugin factions;
+    private Plugin regios;
+    private Plugin izone;
+    private Plugin worldguard;
+    private Plugin towny;
     
     //
     // Properties
@@ -39,14 +47,16 @@ public class Collapse extends JavaPlugin {
 
     @Override
     public void onEnable() {
+        // Default to plugin disabled.
+        pluginEnabled = false;
+
         // Register the music service listener for events.
         getServer().getPluginManager().registerEvents(new CollapseBlockListener(this), this);
 
         // Try to hook the towny listener.
-        /*try {
+        try {
             towny = SupportTowny.getPlugin(getServer());
-            getServer().getPluginManager().registerEvents(new MusicServiceTownyListener((Towny)towny, this), this);
-            addConfig("town");
+            getServer().getPluginManager().registerEvents(new CollapseTownyListener((Towny)towny, this), this);
             info("Hooked Towny Support");
         } catch (PluginUnavailableException ex) {
         }
@@ -54,7 +64,6 @@ public class Collapse extends JavaPlugin {
         // Try to hook the regios support.
         try {
             regios = SupportRegios.getPlugin(getServer());
-            addConfig("regios");
             info("Hooked Regios Support");
         } catch (PluginUnavailableException ex) {
         }
@@ -62,7 +71,6 @@ public class Collapse extends JavaPlugin {
         // Try to hook the iZone support.
         try {
             izone = SupportIZone.getPlugin(getServer());
-            addConfig("izone");
             info("Hooked iZone Support");
         } catch (PluginUnavailableException ex) {
         }
@@ -70,24 +78,19 @@ public class Collapse extends JavaPlugin {
         try {
             // Get the factions plugin, if it exists.
             factions = SupportFactions.getPlugin(getServer());
-            addConfig("faction");
             info("Hooked Factions Support");
         } catch (PluginUnavailableException ex) {
         }
         
         try {
             worldguard = SupportWorldguard.getPlugin(getServer());
-            addConfig("worldguard");
             info("Hooked WorldGuard Support");
         } catch (PluginUnavailableException ex) {
-        }*/
+        }
 
         // Creates a config.yml if there isn't yet one.
         getConfig().options().copyDefaults(true);
         saveConfig();
-        
-        // Default to plugin disabled.
-        pluginEnabled = false;
         
         // Plugin is ready at this point.
         pluginEnabled = true;
@@ -179,5 +182,144 @@ public class Collapse extends JavaPlugin {
     
     public static void severe(String msg) {
         logger.log(Level.SEVERE, String.format("%s %s", LOG_PREFIX, msg));
+    }
+    
+    //
+    // Factions Support
+    //
+    
+    public boolean isFaction(Location location) {
+        if (!pluginEnabled || factions == null) return false;
+        
+        // Faction exists?
+        if (factions.isEnabled()) {
+            try {
+                Faction faction = SupportFactions.getFactionAtLocation(getServer(), location);
+                
+                if (faction != null) {
+                    // Get the faction region name.
+                    String regionName = faction.getTag();
+
+                    if (regionName != null) {
+                        return true;
+                    }
+                }
+            } catch (Exception ex) {
+                // Fail silently. Might mean Factions not installed, or no faction here.
+            }
+        }
+        
+        return false;
+    }
+    
+    //
+    // iZone Support
+    //
+    
+    public boolean isIZone(Location location) {
+        if (!pluginEnabled || izone == null) return false;
+
+        try {
+            Zone zone = ZoneManager.getZone(location);
+
+            // Has iZone zone here?
+            if (zone != null) {
+                return true;
+            }
+        }
+        catch (Exception ex) {
+            // Fail silently. Might mean iZone not installed, or no zone here.
+        }
+
+        return false;
+    }
+    
+    //
+    // Regios Support
+    //
+    
+    public boolean isRegiosRegion(Player player) {
+        if (!pluginEnabled || regios == null) return false;
+
+        try {
+            // Has player?
+            if (player != null) {
+                Region region = GlobalRegionManager.getRegion(player);
+
+                // Has regios region here?
+                if (region != null) {
+                    return true;
+                }
+            }
+        }
+        catch (Exception ex) {
+            // Fail silently. Might mean regios not installed, or no region here.
+        }
+
+        return false;
+    }
+    
+    //
+    // WorldGuard Regions Support
+    //
+
+    public boolean isWorldGuardRegion(Player player) {
+        if (!pluginEnabled || worldguard == null) return false;
+
+        // Has player?
+        if (player != null) {
+            try {
+                ProtectedRegion stationRegion = SupportWorldguard.getWorldGuardRegionAt(getServer(), player);
+                
+                if (stationRegion != null) {
+                    return true;
+                }
+            }
+            catch (Exception ex) {
+                // Fail silently. Might mean worldguard not installed, or no region here.
+            }
+        }
+
+        return false;
+    }
+    
+    //
+    // Towny Support
+    //
+    
+    public boolean isTownyTown(Player player) {
+        if (!pluginEnabled || towny == null) return false;
+
+        try {
+            // Has player?
+            if (player != null) {
+                String name = getTownPlayerIsStandingIn(player);
+
+                // Has town here?
+                if (name != null) {
+                    return true;
+                }
+            }
+        }
+        catch (Exception ex) {
+            // Fail silently. Might mean towny not installed, or no town here.
+        }
+
+        return false;
+    }
+    
+    public void playerNowStandingInTown(Player player, String name) {
+        if (player != null) {
+            playerStandingInTown.put(player.getName(), name);
+        }
+    }
+    
+    public String getTownPlayerIsStandingIn(Player player) {
+        if (player != null) {
+            if (playerStandingInTown.containsKey(player.getName())) {
+                return playerStandingInTown.get(player.getName());
+            }
+        }
+        return null;
     }
 }

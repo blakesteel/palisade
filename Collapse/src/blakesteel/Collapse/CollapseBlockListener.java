@@ -5,6 +5,7 @@ import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -54,8 +55,9 @@ public class CollapseBlockListener implements Listener {
         if (!event.isCancelled()) {
             final Material mat = event.getBlock().getType();
             boolean cavedIn = false;
+            
             if ((mat.equals(Material.STONE) || mat.equals(Material.DIRT) &&
-                    enforceWorldGuard(event.getBlock()) &&
+                    notProtected(event.getPlayer(), event.getBlock()) &&
                     event.getPlayer() != null) &&
                     hasCollapse())
             {
@@ -116,53 +118,34 @@ public class CollapseBlockListener implements Listener {
         }
     }
 
-    public boolean enforceWorldGuard(Block block) {
-        /*List regionSet;
-        List allowedRegions;
-        boolean attack;
-
-        if(Cavein.WGplugin == null)
-            break MISSING_BLOCK_LABEL_215;
+    public boolean notProtected(Player player, Block block) {
+        if (plugin == null) return true;
         
-        WorldGuardPlugin worldGuard = (WorldGuardPlugin)Cavein.WGplugin;
-        Class bukkitUtil = worldGuard.getClass().getClassLoader().loadClass("com.sk89q.worldguard.bukkit.BukkitUtil");
+        boolean notProtected = true;
         
-        Method toVector = bukkitUtil.getMethod("toVector", new Class[] {
-            org/bukkit/block/Block
-        });
+        Collapse collapse = (Collapse)plugin;
         
-        Vector blockVector = (Vector)toVector.invoke(null, new Object[] {
-            block
-        });
-        
-        regionSet = worldGuard.getGlobalRegionManager().get(Cavein.WGplugin.getServer().getWorld("world")).getApplicableRegionsIDs(blockVector);
-        allowedRegions = Arrays.asList(Config.worldguard_allowed_regions.split(","));
-        
-        attack = false;
-        
-        if(regionSet.size() < 1)
-            return true;
-        
-        if(Config.worldguard_allowed_regions.equals("*") && regionSet.size() > 0)
-            return true;
-        
-        for (Iterator iterator = regionSet.iterator(); iterator.hasNext();) {
-            String region = (String)iterator.next();
-            if(allowedRegions.contains(region))
-            {
-                attack = true;
-                break;
-            }
+        if (collapse.isFaction(block.getLocation())) {
+            Collapse.debug("faction protected");
+            notProtected = false;
         }
-
-        if(attack)
-            return true;
-        break MISSING_BLOCK_LABEL_215;
-        Exception e;
-        e;
-        e.printStackTrace();
-        return false;*/
+        else if (collapse.isTownyTown(player)) {
+            Collapse.debug("towny protected");
+            notProtected = false;
+        }
+        else if (collapse.isIZone(block.getLocation())) {
+            Collapse.debug("izone protected");
+            notProtected = false;
+        }
+        else if (collapse.isRegiosRegion(player)) {
+            Collapse.debug("regios protected");
+            notProtected = false;
+        }
+        else if (collapse.isWorldGuardRegion(player)) {
+            Collapse.debug("worldguard protected");
+            notProtected = false;
+        }
         
-        return true;
+        return notProtected;
     }
 }

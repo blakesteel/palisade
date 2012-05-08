@@ -200,21 +200,25 @@ public class MusicService extends JavaPlugin {
                 String[] cmdArgs = new String[args.length - 1];
                 System.arraycopy(args, 1, cmdArgs, 0, args.length - 1);
                 
-                if (args[0].equalsIgnoreCase("findshout")) { // /music find
-                    if (player.hasPermission("musicservice.find"))
+                if (args[0].equalsIgnoreCase("findshout")) { // /music findshout
+                    if (player.hasPermission("musicservice.findshout"))
                         return commandFindShout(player, cmdArgs);
                 }
-                else if (args[0].equalsIgnoreCase("findice")) { // /music find
-                    if (player.hasPermission("musicservice.find"))
+                else if (args[0].equalsIgnoreCase("findice")) { // /music findice
+                    if (player.hasPermission("musicservice.findice"))
                         return commandFindIce(player, cmdArgs);
                 }
                 else if (args[0].equalsIgnoreCase("pick")) { // /music pick
                     if (player.hasPermission("musicservice.pick"))
                         return commandPick(player, cmdArgs);
                 }
-                else if (args[0].equalsIgnoreCase("set")) { // /music set
-                    if (player.hasPermission("musicservice.set"))
-                        return commandSet(player, cmdArgs);
+                else if (args[0].equalsIgnoreCase("setshout")) { // /music setshout
+                    if (player.hasPermission("musicservice.setshout"))
+                        return commandSetShout(player, cmdArgs);
+                }
+                else if (args[0].equalsIgnoreCase("setice")) { // /music setice
+                    if (player.hasPermission("musicservice.setice"))
+                        return commandSetIce(player, cmdArgs);
                 }
                 else if (args[0].equalsIgnoreCase("reload")) { // /music reload
                     if (player.hasPermission("musicservice.reload"))
@@ -244,7 +248,7 @@ public class MusicService extends JavaPlugin {
             info(player.getName() + " findshout: " + searchString);
             sendMessage(player, "findshout: " + searchString);
 
-            Bukkit.getScheduler().scheduleSyncDelayedTask(
+            Bukkit.getScheduler().scheduleAsyncDelayedTask(
                 this,
                 new Runnable() {
                     @Override
@@ -289,7 +293,7 @@ public class MusicService extends JavaPlugin {
             info(player.getName() + " findice: " + searchString);
             sendMessage(player, "findice: " + searchString);
 
-            Bukkit.getScheduler().scheduleSyncDelayedTask(
+            Bukkit.getScheduler().scheduleAsyncDelayedTask(
                 this,
                 new Runnable() {
                     @Override
@@ -323,43 +327,57 @@ public class MusicService extends JavaPlugin {
     }
     
     private boolean commandPick(Player player, String[] args) {
-        // Get the player name.
-        String playerName = player.getName();
+        try {
+            // Get the player name.
+            String playerName = player.getName();
 
-        if (args.length > 0)
-            info(playerName + " picking station: " + args[0]);
+            if (args.length > 0)
+                info(playerName + " picking station: " + args[0]);
 
-        // Player conducted a search?
-        if (playerSearches.containsKey(playerName)) {
-            debug("Has search results.");
-            
-            // Get the streams they found.
-            List<StreamInfo> infos = playerSearches.get(playerName);
-            
-            debug("Got stream info list.");
-            
-            if (infos != null && infos.size() > 0) {
-                boolean isIcecast = infos.get(0).Type == StreamInfo.StreamType.Icecast;
-                
-                // Pick the music stream # they wanted.
-                pickMusic(player, infos, Integer.parseInt(args[0]), isIcecast);
+            // Player conducted a search?
+            if (playerSearches.containsKey(playerName)) {
+                debug("Has search results.");
 
-                debug("picked music");
+                // Get the streams they found.
+                List<StreamInfo> infos = playerSearches.get(playerName);
+
+                debug("Got stream info list.");
+
+                if (infos != null && infos.size() > 0) {
+                    boolean isIcecast = infos.get(0).Type == StreamInfo.StreamType.Icecast;
+
+                    // Pick the music stream # they wanted.
+                    pickMusic(player, infos, Integer.parseInt(args[0]), isIcecast);
+
+                    debug("picked music");
+                }
+
+                return true;
+            } else {
+                sendMessage(player, "First type: /music <findshout|findice> <searchString>");
             }
-
-            return true;
-        } else {
-            sendMessage(player, "First type: /music <findshout|findice> <searchString>");
+        }
+        catch (NumberFormatException ex) {
+            sendMessage(player, "Please type a number instead, found to the left of the search result you want to playback.");
         }
         return false;
     }
     
-    private boolean commandSet(Player player, String[] args) {
+    private boolean commandSetShout(Player player, String[] args) {
         if (args.length > 0) {
             setStation(player, new String[] { args[0] }, false);
             return true;
         }
-        sendMessage(player, "Type /music set http://yourdomainOrIp.com:8080");
+        sendMessage(player, "Type /music setshout http://yourdomainOrIp.com:8080");
+        return false;
+    }
+
+    private boolean commandSetIce(Player player, String[] args) {
+        if (args.length > 0) {
+            setStation(player, new String[] { args[0] }, true);
+            return true;
+        }
+        sendMessage(player, "Type /music setice http://yourdomainOrIp.com:8080");
         return false;
     }
     
@@ -392,8 +410,10 @@ public class MusicService extends JavaPlugin {
             sendMessage(player, "/music findice <searchString>");
         if (player.hasPermission("musicservice.pick"))
             sendMessage(player, "/music pick <#>");
-        if (player.hasPermission("musicservice.set"))
-            sendMessage(player, "/music set <URL>");
+        if (player.hasPermission("musicservice.setshout"))
+            sendMessage(player, "/music setshout <URL>");
+        if (player.hasPermission("musicservice.setice"))
+            sendMessage(player, "/music setice <URL>");
         if (player.hasPermission("musicservice.reload"))
             sendMessage(player, "/music reload");
         return true;
@@ -859,7 +879,7 @@ public class MusicService extends JavaPlugin {
         
         // Faction exists?
         if (factions != null && factions.isEnabled()) {
-            Faction faction = null;
+            Faction faction;
             try {
                 faction = SupportFactions.getFactionAtLocation(getServer(), location);
             } catch (PluginUnavailableException ex) {
@@ -1312,7 +1332,8 @@ public class MusicService extends JavaPlugin {
                 if (url != null) {
                     debug("has url");
                     
-                    boolean isIcecast = info.Type == StreamInfo.StreamType.Icecast || forceIcecast;
+                    //boolean isIcecast = info.Type == StreamInfo.StreamType.Icecast || forceIcecast;
+                    boolean isIcecast = info.Type == StreamInfo.StreamType.Icecast;
 
                     debug(String.format("Changing station for %s in %s to %s, isIcecast = %s", player.getName(), fieldName, url, (isIcecast) ? "yes" : "no"));
 

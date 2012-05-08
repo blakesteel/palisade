@@ -1,5 +1,5 @@
 name: MusicService
-version: 1.4.8
+version: 1.4.9
 description: Provides the ability to stream music.
 author: Palisade
 website: http://dev.bukkit.org/server-mods/musicservice-play-music-anywhere/
@@ -18,13 +18,17 @@ permissions:
   musicservice.*:
     description: Supports setting of the music stations.
     children:
-      musicservice.set: true
+      musicservice.setshout: true
+      musicservice.setice: true
       musicservice.reload: true
       musicservice.pick: true
       musicservice.findshout: true
       musicservice.findice: true
-  musicservice.set:
-    description: Set the music URL for this location.
+  musicservice.setshout:
+    description: Set the music shoutcast URL for this location.
+    default: op
+  musicservice.setice:
+    description: Set the music icecast URL for this location.
     default: op
   musicservice.reload:
     description: Reload the music at this location.

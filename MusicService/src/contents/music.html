@@ -85,6 +85,11 @@ function beginload() {
         document.getElementById('shoutcastLogo').style.visibility = "hidden";
         writePlayer("#URL");
     }
+    else {
+        changeStatus("Shoutcast protocol assumed.");
+        document.getElementById('iceLogo').style.visibility = "hidden";
+        writePlayer("#URL/;stream.mp3");
+    }
     request();
 }
 function updateLed() {
@@ -126,6 +131,6 @@ Status: <b id='status'>Ready.</b><br>
 Notes: <b id='notes'>No Notes.</b><br>
 <img src="http://www.icecast.org/images/icecast.png" id="iceLogo" border="0" width="32" height="24" />
 <a href="http://www.shoutcast.com/"><img src="http://www.aolcdn.com/shoutcast/sc_radio_tout.jpg" id="shoutcastLogo" border="0" width="32" height="24"/></a>
-<img src="#ROOT/icecast.png" id="icecast" border="0" width="32" height="24" onload="icecastFound();" onerror="shoutcastFound();" style="visibility:hidden" />
+<!-- <img src="#ROOT/icecast.png" id="icecast" border="0" width="32" height="24" onload="icecastFound();" onerror="shoutcastFound();" style="visibility:hidden" /> -->
 </body>
 </html>

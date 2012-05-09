@@ -58,8 +58,11 @@ public class SupportFactions {
                 // Get the faction's admin.
                 FPlayer factionAdmin = faction.getFPlayerAdmin();
 
-                if (factionAdmin != null && factionAdmin.getPlayer().equals(player)) {
-                    return true;
+                if (factionAdmin != null) {
+                    Player adminPlayer = factionAdmin.getPlayer();
+                    if (adminPlayer != null && adminPlayer.equals(player)) {
+                        return true;
+                    }
                 }
             }
         }

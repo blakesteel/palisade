@@ -532,7 +532,8 @@ public class MusicService extends JavaPlugin {
                         sendMessage(player, "This is not your faction land.");
                         return false;
                     }
-                } catch (PluginUnavailableException ex) {
+                }
+                catch (Exception ex) {
                     return false;
                 }
             }

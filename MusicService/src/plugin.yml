@@ -6,7 +6,7 @@ website: http://dev.bukkit.org/server-mods/musicservice-play-music-anywhere/
 
 main: blakesteel.MusicService.MusicService
 database: false
-softdepend: [WorldGuard, Factions, Towny, Regios, iZone]
+softdepend: [WorldGuard, Factions, Towny, Regios, iZone, Spout]
 
 commands:
   musicservice:
@@ -24,6 +24,7 @@ permissions:
       musicservice.pick: true
       musicservice.findshout: true
       musicservice.findice: true
+      musicservice.playogg: true
   musicservice.setshout:
     description: Set the music shoutcast URL for this location.
     default: op
@@ -41,4 +42,7 @@ permissions:
     default: op
   musicservice.findice:
     description: Find music streams on icecast by searching.
+    default: op
+  musicservice.playogg:
+    description: Play an ogg file from an address.
     default: op

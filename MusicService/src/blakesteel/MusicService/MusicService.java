@@ -1,14 +1,16 @@
 package blakesteel.MusicService;
 
+import com.jcraft.jogg.Packet;
+import com.jcraft.jogg.Page;
+import com.jcraft.jogg.StreamState;
+import com.jcraft.jogg.SyncState;
+import com.jcraft.jorbis.*;
 import com.massivecraft.factions.Faction;
 import com.palmergames.bukkit.towny.Towny;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 import couk.Adamki11s.Regios.Regions.GlobalRegionManager;
 import couk.Adamki11s.Regios.Regions.Region;
-import java.io.File;
-import java.io.IOException;
-import java.io.PrintWriter;
-import java.io.StringWriter;
+import java.io.*;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -37,7 +39,9 @@ public class MusicService extends JavaPlugin {
     public static boolean DEBUG = false;
     private static final Logger logger = Logger.getLogger("Minecraft");
     private static final String LOG_PREFIX = "[MusicService] ";
+    
     private boolean pluginEnabled = false;
+    
     private Map<String, Integer> radioTowers = new HashMap<String, Integer>();
     private Map<String, String> radioStations = new HashMap<String, String>();
     private Map<String, String> playerStations = new HashMap<String, String>();
@@ -45,17 +49,30 @@ public class MusicService extends JavaPlugin {
     private Map<String, String> playerStandingInTown = new HashMap<String, String>();
     private Map<String, Boolean> musicChangeScheduled = new HashMap<String, Boolean>();
     private Map<String, FileConfiguration> configurations = new HashMap<String, FileConfiguration>();
+    
     private WebMemoryFile templateWebFile = null;
-    private String refreshUrl = "http://localhost:8888/";
+    
     private Plugin factions;
     private Plugin regios;
     private Plugin izone;
     private Plugin worldguard;
     private Plugin towny;
+    private Plugin spout;
+    
     private WebServer webserver;
+    
     private int wwwPort = 8888;
+    
+    private String refreshUrl = "http://localhost:8888/";
+
     private String refresh = "<meta HTTP-EQUIV=\"REFRESH\" content=\"2; url=#REFRESH" +
                              "#USER.html\">There is currently no music station available at this position.";
+    
+    private String pluginDir;
+    
+    public static File musicDirectory;
+    
+    private List<SpoutMusic> songs = new ArrayList<SpoutMusic>();
     
     //
     // Properties
@@ -68,55 +85,25 @@ public class MusicService extends JavaPlugin {
     public Map<String, Integer> getRadioTowers() {
         return radioTowers;
     }
-    
+
     //
     // Bukkit Plugin Events
     //
 
     @Override
     public void onEnable() {
+        // Get the plugin directory.
+        pluginDir = new File(new File(new File(".").getAbsolutePath(), "plugins"), "MusicService").toString();
+        debug("MusicService Plugin Path: " + pluginDir);
+        
+        musicDirectory = new File(pluginDir, "music");
+        debug("Music Storage Path: " + musicDirectory.getPath());
+        
         // Register the music service listener for events.
         getServer().getPluginManager().registerEvents(new MusicServiceListener(this), this);
 
-        // Try to hook the towny listener.
-        try {
-            towny = SupportTowny.getPlugin(getServer());
-            getServer().getPluginManager().registerEvents(new MusicServiceTownyListener((Towny)towny, this), this);
-            addConfig("town");
-            info("Hooked Towny Support");
-        } catch (PluginUnavailableException ex) {
-        }
-        
-        // Try to hook the regios support.
-        try {
-            regios = SupportRegios.getPlugin(getServer());
-            addConfig("regios");
-            info("Hooked Regios Support");
-        } catch (PluginUnavailableException ex) {
-        }
-        
-        // Try to hook the iZone support.
-        try {
-            izone = SupportIZone.getPlugin(getServer());
-            addConfig("izone");
-            info("Hooked iZone Support");
-        } catch (PluginUnavailableException ex) {
-        }
-
-        try {
-            // Get the factions plugin, if it exists.
-            factions = SupportFactions.getPlugin(getServer());
-            addConfig("faction");
-            info("Hooked Factions Support");
-        } catch (PluginUnavailableException ex) {
-        }
-        
-        try {
-            worldguard = SupportWorldguard.getPlugin(getServer());
-            addConfig("worldguard");
-            info("Hooked WorldGuard Support");
-        } catch (PluginUnavailableException ex) {
-        }
+        // Hook soft plugin dependancies.
+        hookPlugins();
 
         addConfig("wilderness");
 
@@ -153,11 +140,11 @@ public class MusicService extends JavaPlugin {
         }
 
         webserver = new WebServer();
-        setWebFile("favicon.ico");
-        setWebFile("ffmp3.swf");
-        setWebFile("green.png");
-        setWebFile("index.html");
-        setWebFile("yellow.png");
+        setMemoryFile("favicon.ico");
+        setMemoryFile("ffmp3.swf");
+        setMemoryFile("green.png");
+        setMemoryFile("index.html");
+        setMemoryFile("yellow.png");
         webserver.start(wwwPort);
 
         // Plugin is ready at this point.
@@ -220,6 +207,11 @@ public class MusicService extends JavaPlugin {
                     if (player.hasPermission("musicservice.setice"))
                         return commandSetIce(player, cmdArgs);
                 }
+                else if (args[0].equalsIgnoreCase("playogg")) {
+                    if (player.hasPermission("musicservice.playogg")) {
+                        return commandPlayOgg(player, cmdArgs);
+                    }
+                }
                 else if (args[0].equalsIgnoreCase("reload")) { // /music reload
                     if (player.hasPermission("musicservice.reload"))
                         return commandReload(player, cmdArgs);
@@ -235,7 +227,43 @@ public class MusicService extends JavaPlugin {
         }
         return false;
     }
+    
+    private boolean commandPlayOgg(final Player player, String[] args) {
+        if (spout != null) {
+            if (args.length > 0) {
+                File file = new File(musicDirectory, args[0]);
 
+                info("Queueing OGG song: " + file.getPath());
+                
+                float duration = 0;
+                try {
+                    JOrbisAdapter.VorbisFile vf = new JOrbisAdapter.VorbisFile(file);
+                    
+                    duration = vf.getDuration();
+                } catch (Exception ex) {
+                    severe("Error: " + ex.getMessage());
+                }
+                
+                debug("Duration: " + duration);
+                
+                String fileurl = "file:///" + file.getPath().replace("\\", "/");
+                
+                debug("fileurl: " + fileurl);
+                
+                songs.add(new SpoutMusic(fileurl, (int)duration));
+                
+                // TODO: Check if the playlist is not already playing, then play...
+                SupportSpout.playMusicList(this, songs, player.getLocation(), 10, 100);
+                return true;
+            }
+            info("Could not queue ogg. Arguments not provided.");
+        }
+        else {
+            info("Could not queue ogg. Spout not found.");
+        }
+        return false;
+    }
+    
     private boolean commandFindShout(final Player player, String[] args) {
         // Has arguments?
         if (args.length > 0) {
@@ -429,7 +457,7 @@ public class MusicService extends JavaPlugin {
     // Webserver Routines
     //
     
-    private void setWebFile(String path) {
+    private void setMemoryFile(String path) {
         try {
             byte[] bytes = Utility.loadFromResourceAsBytes(getClass(), path);
             webserver.setMemoryValue(path, new WebMemoryFile(bytes));
@@ -437,6 +465,14 @@ public class MusicService extends JavaPlugin {
             StringWriter sw = new StringWriter();
             ex.printStackTrace(new PrintWriter(sw));
             severe("Error: " + sw.toString());
+        }
+    }
+    
+    private void setLocalFile(String path) {
+        try {
+            webserver.setMemoryValue(path, new WebFile(new File(path)));
+        } catch (FileNotFoundException ex) {
+            severe("Error: File not found - " + ex.getMessage());
         }
     }
     
@@ -674,10 +710,10 @@ public class MusicService extends JavaPlugin {
         }
         
         // Set music on wilderness.
-        if (setMusicInWilderness(player, args, forceIcecast)) {
+        /*if (setMusicInWilderness(player, args, forceIcecast)) {
             debug("Wilderness");
             return true;
-        }
+        }*/
         
         // Only fails without a tower.
         sendMessage(player, "No tower here.");
@@ -842,9 +878,9 @@ public class MusicService extends JavaPlugin {
                             if (!handleIZone(player)) {
                                 //debug("not an iZone region");
                                 // Must be wilderness, check for tower.
-                                if (!handleWilderness(player)) {
+                                //if (!handleWilderness(player)) {
                                     //debug("no radio tower");
-                                }
+                                //}
                             }
                         }
                     }
@@ -1360,5 +1396,65 @@ public class MusicService extends JavaPlugin {
         FileConfiguration stationConfig = Utility.configReload(this, stationFile);
         configurations.put(configName, stationConfig);
         debug("added config for: " + configName);
+    }
+
+    //
+    // Plugin Support
+    //
+    
+    private void hookPlugins() {
+        // Try to hook the Towny Advanced support.
+        try {
+            towny = SupportTowny.getPlugin(getServer());
+            getServer().getPluginManager().registerEvents(new MusicServiceTownyListener((Towny)towny, this), this);
+            addConfig("town");
+            info("Hooked Towny Support");
+        } catch (PluginUnavailableException ex) {
+            debug("No Towny Support");
+        }
+        
+        // Try to hook the Regios support.
+        try {
+            regios = SupportRegios.getPlugin(getServer());
+            addConfig("regios");
+            info("Hooked Regios Support");
+        } catch (PluginUnavailableException ex) {
+            debug("No Regios Support");
+        }
+        
+        // Try to hook the iZone support.
+        try {
+            izone = SupportIZone.getPlugin(getServer());
+            addConfig("izone");
+            info("Hooked iZone Support");
+        } catch (PluginUnavailableException ex) {
+            debug("No iZone Support");
+        }
+
+        // Try to hook the Factions support.
+        try {
+            factions = SupportFactions.getPlugin(getServer());
+            addConfig("faction");
+            info("Hooked Factions Support");
+        } catch (PluginUnavailableException ex) {
+            debug("No Factions Support");
+        }
+        
+        // Try to hook the WorldGuard support.
+        try {
+            worldguard = SupportWorldguard.getPlugin(getServer());
+            addConfig("worldguard");
+            info("Hooked WorldGuard Support");
+        } catch (PluginUnavailableException ex) {
+            debug("No WorldGuard Support");
+        }
+        
+        // Try to hook the Spout support.
+        try {
+            spout = SupportSpout.getPlugin(getServer());
+            info("Hooked Spout Support");
+        } catch (PluginUnavailableException ex) {
+            debug("No Spout Support");
+        }
     }
 }

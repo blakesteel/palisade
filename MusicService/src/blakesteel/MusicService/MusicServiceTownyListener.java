@@ -1,8 +1,8 @@
 package blakesteel.MusicService;
 
-import com.palmergames.bukkit.towny.NotRegisteredException;
 import com.palmergames.bukkit.towny.Towny;
-import com.palmergames.bukkit.towny.event.TownyPlayerListener;
+import com.palmergames.bukkit.towny.exceptions.NotRegisteredException;
+import com.palmergames.bukkit.towny.listeners.TownyPlayerListener;
 import com.palmergames.bukkit.towny.object.*;
 import java.util.logging.Logger;
 import org.bukkit.Location;

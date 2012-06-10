@@ -33,14 +33,14 @@ public class WebServer extends Thread {
     private int maxPoolSize = 5;        // Up to 5 connections at a time handled.
     private long keepAliveTime = 10;    // Keep-alive time defaults to 10.
     private ServerSocket serversocket = null; // The server accept socket.
-    private Map<String, WebMemoryFile> memoryMap = new ConcurrentHashMap<String, WebMemoryFile>();
+    private Map<String, IWebFile> webFileTable = new ConcurrentHashMap<String, IWebFile>();
     
-    public void setMemoryValue(String path, WebMemoryFile memoryFile) {
-        memoryMap.put(path.toLowerCase(), memoryFile);
+    public void setMemoryValue(String path, IWebFile webFile) {
+        webFileTable.put(path.toLowerCase(), webFile);
     }
     
-    public WebMemoryFile getMemoryValue(String path) {
-        return memoryMap.get(path.toLowerCase());
+    public IWebFile getMemoryValue(String path) {
+        return webFileTable.get(path.toLowerCase());
     }
 
     public WebServer() {
@@ -100,13 +100,14 @@ public class WebServer extends Thread {
                     final InetAddress client = connectionsocket.getInetAddress();
                     final BufferedReader input = new BufferedReader(new InputStreamReader(connectionsocket.getInputStream()));
                     final DataOutputStream output = new DataOutputStream(connectionsocket.getOutputStream());
+                    final int sendBufferSize = connectionsocket.getSendBufferSize();
 
                     // Spawn off a thread from the threadpool for each handler.
                     threadPool.execute(new Runnable() {
                         @Override
                         public void run() {
                             try {
-                                http_handler(client, input, output);
+                                http_handler(client, input, output, sendBufferSize);
                             }
                             catch (Exception ex) {
                                 debug("http_handler Communication Error: " + ex.getMessage());
@@ -141,7 +142,8 @@ public class WebServer extends Thread {
 
     private void http_handler(InetAddress client,
                               BufferedReader input,
-                              DataOutputStream output) throws IOException {
+                              DataOutputStream output,
+                              int sendBufferSize) throws IOException {
         int method = 0;
         int start = 0;
         int end = 0;
@@ -213,10 +215,10 @@ public class WebServer extends Thread {
                 }
             }
             
-            WebMemoryFile memoryFile = memoryMap.get(path.toLowerCase());
+            IWebFile webFile = webFileTable.get(path.toLowerCase());
             
-            // Valid memory file?
-            if (memoryFile != null && memoryFile.getEnabled()) {
+            // Valid file?
+            if (webFile != null && webFile.getEnabled()) {
                 // Determine MIME type from path.
                 int mimeType = getMimeType(path);
 
@@ -225,16 +227,48 @@ public class WebServer extends Thread {
 
                 // If GET or POST, send the file contents.
                 if (method == 1 || method == 3) {
-                    output.write(memoryFile.getBytes());
+                    output.write(webFile.getBytes());
                     debug("Sent: " + path);
                 }
             }
             // Not found?
             else {
-                output.writeBytes(construct_http_header(client, null, 404, -1));
-                output.writeBytes(getNotFoundHtml(path));
+                info("Not found: " + path);
                 
-                debug("404: " + path);
+                // Has file been sent, false by default.
+                boolean sentFile = false;
+
+                /*try {
+                    // Make sure they're not trying to move outside the destination path.
+                    if (!path.contains("..")) {
+                        // Get the file path and root it in the music directory.
+                        File file = new File(MusicService.musicDirectory, path);
+
+                        // Check if the file exists.
+                        if (file.exists()) {
+                            InputStream is = new FileInputStream(file);
+
+                            int bytesRead;
+                            byte[] buffer = new byte[sendBufferSize];
+                            while ((bytesRead = is.read(buffer)) > 0) {
+                                output.write(buffer, 0, bytesRead);
+                            }
+                            is.close();
+
+                            sentFile = true;
+                        }
+                    }
+                }
+                catch (Exception ex) {
+                    // Failed to send the file.
+                }*/
+                
+                if (!sentFile) {
+                    output.writeBytes(construct_http_header(client, null, 404, -1));
+                    output.writeBytes(getNotFoundHtml(path));
+
+                    debug("404: " + path);
+                }
             }
         }
         catch (Exception ex) {
@@ -276,6 +310,8 @@ public class WebServer extends Thread {
             mimeType = 6;
         } else if (path.endsWith(".txt")) {
             mimeType = 7;
+        } else if (path.endsWith(".ogg")) {
+            mimeType = 9;
         }
         return mimeType;
     }
@@ -360,6 +396,9 @@ public class WebServer extends Thread {
                 break;
             case 8:
                 s += "Content-Type: multipart/form-data";
+                break;
+            case 9:
+                s += "Content-Type: audio/ogg";
                 break;
             default:
                 s += "Content-Type: text/html\r\n";
